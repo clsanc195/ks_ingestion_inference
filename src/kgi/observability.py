@@ -38,10 +38,12 @@ def langgraph_callbacks() -> list:
     if not enabled():
         return []
     try:
-        try:
-            from langfuse.langchain import CallbackHandler
-        except ImportError:  # older SDK layout
-            from langfuse.callback import CallbackHandler
+        from langfuse.langchain import CallbackHandler
+
+        # Touch the client so its atexit flush is registered even for runs that
+        # make no LLM calls (e.g. a review resume) — otherwise a short-lived CLI
+        # process exits before the batched callback events are exported.
+        _client()
         return [CallbackHandler()]
     except Exception:
         return []

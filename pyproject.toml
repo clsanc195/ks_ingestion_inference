@@ -19,6 +19,7 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn>=0.30",
     "langfuse>=3,<4",  # v4 changed the observation API; pinned to the v3 API we use
+    "langchain>=0.3",  # required by langfuse.langchain CallbackHandler
     "rich>=13",
     "lxml>=5.2",
 ]
