@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
@@ -339,13 +340,17 @@ def score_route_node(state: IngestState) -> dict:
     return {"patch": patch}
 
 
-def stage_node(state: IngestState) -> dict:
-    """Candidates land in staging as a routed patch — nothing has touched canonical."""
+def stage_node(state: IngestState, config: "RunnableConfig") -> dict:
+    """Candidates land in staging as a routed patch — nothing has touched canonical.
+    The run's thread_id is stored with the patch so `kgi review` can resume it."""
     from kgi.stores.neo4j import StagingStore
 
     staging = StagingStore()
     try:
-        staging.save_patch(state["patch"])
+        staging.save_patch(
+            state["patch"],
+            thread_id=config.get("configurable", {}).get("thread_id"),
+        )
     finally:
         staging.close()
     return {}
@@ -361,7 +366,14 @@ def needs_review(state: IngestState) -> str:
 
 def review_node(state: IngestState) -> dict:
     """The HITL gate (L9). Parks until the reviewer resumes with
-    {op_id: {"action": "accept"|"reject"|"edit", "edited_op": {...}}}."""
+    {op_id: {"action": "accept"|"reject"|"edit", "edited_op": {...},
+             "reviewer_id": str, "note": str}}."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from kgi.models import ReviewAction, ReviewDecision
+    from kgi.stores.neo4j import StagingStore
+
     patch = state["patch"]
     decisions = interrupt(
         {
@@ -374,22 +386,37 @@ def review_node(state: IngestState) -> dict:
             ],
         }
     )
-    for routed in patch.ops:
-        if routed.route != RouteTarget.review or routed.status != OpStatus.pending:
-            continue
-        d = decisions.get(routed.op.op_id)
-        if d is None:
-            continue  # defer: stays pending, held back at commit
-        action = d["action"]
-        if action in ("accept", "force_merge"):
-            routed.status = OpStatus.approved
-        elif action == "edit":
-            routed.op = type(routed.op).model_validate(
-                {**routed.op.model_dump(), **d["edited_op"]}
+    staging = StagingStore()
+    try:
+        for routed in patch.ops:
+            if routed.route != RouteTarget.review or routed.status != OpStatus.pending:
+                continue
+            d = decisions.get(routed.op.op_id)
+            if d is None:
+                continue  # defer: stays pending, held back at commit
+            action = d["action"]
+            if action in ("accept", "force_merge"):
+                routed.status = OpStatus.approved
+            elif action == "edit":
+                routed.op = type(routed.op).model_validate(
+                    {**routed.op.model_dump(), **d["edited_op"]}
+                )
+                routed.status = OpStatus.approved
+            elif action == "reject":
+                routed.status = OpStatus.rejected
+            staging.save_decision(
+                ReviewDecision(
+                    decision_id=f"dec_{_uuid.uuid4().hex[:12]}",
+                    patch_id=patch.patch_id,
+                    op_id=routed.op.op_id,
+                    reviewer_id=d.get("reviewer_id", "unknown"),
+                    action=ReviewAction(action),
+                    note=d.get("note", ""),
+                    decided_at=datetime.now(timezone.utc),
+                )
             )
-            routed.status = OpStatus.approved
-        elif action == "reject":
-            routed.status = OpStatus.rejected
+    finally:
+        staging.close()
     return {"patch": patch}
 
 

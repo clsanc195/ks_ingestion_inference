@@ -18,7 +18,7 @@ import json
 from neo4j import GraphDatabase
 
 from kgi.config import settings
-from kgi.models import Patch
+from kgi.models import Patch, ReviewDecision
 
 
 class _Base:
@@ -181,17 +181,41 @@ class StagingStore(_Base):
     """Quarantine for pending patches (L4). The :Patch nodes double as the audit trail:
     status transitions pending -> committed / requeued are never deleted."""
 
-    def save_patch(self, patch: Patch, status: str = "pending") -> None:
+    def save_patch(self, patch: Patch, status: str = "pending",
+                   thread_id: str | None = None) -> None:
         with self.session() as s:
             s.run(
                 "MERGE (p:Patch {id: $id}) "
                 "SET p.doc_id = $doc_id, p.status = $status, "
-                "    p.json = $json, p.created_at = $created_at",
+                "    p.json = $json, p.created_at = $created_at, "
+                "    p.thread_id = coalesce($thread_id, p.thread_id)",
                 id=patch.patch_id,
                 doc_id=patch.doc_id,
                 status=status,
                 json=patch.model_dump_json(),
                 created_at=patch.created_at.isoformat(),
+                thread_id=thread_id,
+            )
+
+    def thread_for_patch(self, patch_id: str) -> str | None:
+        """The LangGraph thread a pending patch is parked on — `kgi review` resumes it."""
+        with self.session() as s:
+            rec = s.run(
+                "MATCH (p:Patch {id: $id}) RETURN p.thread_id AS t", id=patch_id
+            ).single()
+            return rec["t"] if rec else None
+
+    def save_decision(self, decision: "ReviewDecision") -> None:
+        """Review decisions are provenance (L11) and active-learning labels (L15)."""
+        with self.session() as s:
+            s.run(
+                "CREATE (d:ReviewDecision {id: $id, patch_id: $patch_id, op_id: $op_id, "
+                "reviewer_id: $reviewer_id, action: $action, note: $note, "
+                "decided_at: $decided_at})",
+                id=decision.decision_id, patch_id=decision.patch_id,
+                op_id=decision.op_id, reviewer_id=decision.reviewer_id,
+                action=decision.action.value, note=decision.note,
+                decided_at=decision.decided_at.isoformat(),
             )
 
     def load_patch(self, patch_id: str) -> Patch:

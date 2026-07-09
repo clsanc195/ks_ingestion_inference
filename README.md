@@ -66,9 +66,16 @@ preserved); semantic conflicts force-route both ops to human review. Extraction 
 guided by canonical's live vocabulary (types + predicates), so repeat documents reuse
 terms instead of coining paraphrases.
 
-Remaining stubs, in suggested build order:
+**The review loop is usable from the terminal**: `kgi ingest <doc>` parks at the gate
+and exits; `kgi pending` lists parked patches; `kgi review <patch_id>` walks each op
+(accept / reject-with-note / defer) and resumes the run — possibly days later, from a
+different process, thanks to the Postgres checkpointer. Every decision is recorded as
+`ReviewDecision` provenance with reviewer identity (the future active-learning labels).
+`--all accept|reject` for batch decisions.
 
-1. `cli.py pending`/`review` — terminal review loop before investing in the web UI
+Remaining, in suggested order:
+
+1. Graph client/viewer to showcase ingestion + relationships
 2. `schema/manager.py` persistence + type-curation pass (currently in-memory)
 3. Retrieval layer (L13) + eval harness (L15)
 ```

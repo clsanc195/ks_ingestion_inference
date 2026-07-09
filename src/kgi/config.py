@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "kgi-entities"
 
-    postgres_dsn: str = "postgresql://kgi:kgi-local-dev@localhost:5432/kgi"
+    postgres_dsn: str = "postgresql://kgi:kgi-local-dev@localhost:5433/kgi"
 
     extraction_model: str = "claude-sonnet-5"
 
