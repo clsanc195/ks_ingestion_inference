@@ -13,6 +13,7 @@ dependencies = [
     "anthropic>=0.40",
     "neo4j>=5.20",
     "qdrant-client>=1.9",
+    "fastembed>=0.3",
     "typer>=0.12",
     "rich>=13",
     "lxml>=5.2",

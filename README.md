@@ -48,11 +48,18 @@ ledger-backed patch applier with rebase-at-commit precondition checks, dependenc
 blocking, and reversible merges. Integration tests need a live Neo4j
 (`docker compose up -d neo4j`; **they wipe the database**).
 
-Known limitation, by design: resolution is exact-match only, so paraphrases across
-*different* documents ("is CEO of" vs "is chief executive officer of") create parallel
-edges. That's the next layer's job. Remaining stubs, in suggested build order:
+The **resolution cascade is live** (rules → embedding → LLM), with thresholds calibrated
+empirically on bge-small-en-v1.5: true aliases ("Acme Corp"/"Acme Corporation", 0.99)
+auto-merge with reviewable `SAME_AS` provenance, while lookalike siblings
+("GripperOne"/"GripperTwo", 0.87) land in the ambiguous band and go to the LLM judge —
+which keeps them distinct. Predicate paraphrases ("is chief executive officer of" ≈
+"is CEO of") normalize to the known predicate and reinforce instead of duplicating.
+Entity/predicate vectors (Qdrant, local fastembed embeddings) are indexed at commit
+time only — staged candidates are never searchable.
 
-1. `resolution/cascade.py` embedding + LLM tiers (entity *and* predicate paraphrase)
-2. `conflict/engine.py` correlation → contradiction detection → bi-temporal ops
-3. `cli.py pending`/`review` — terminal review loop before investing in the web UI
+Remaining stubs, in suggested build order:
+
+1. `conflict/engine.py` correlation → contradiction detection → bi-temporal ops
+2. `cli.py pending`/`review` — terminal review loop before investing in the web UI
+3. `schema/manager.py` persistence + type-curation pass (currently in-memory)
 ```

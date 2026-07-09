@@ -145,17 +145,23 @@ def _dedupe_batch(
 
 
 def resolve_node(state: IngestState) -> dict:
-    """Rules-tier resolution + minimal correlation -> proposed Patch (§3.1 step 6).
+    """Resolution cascade + minimal correlation -> proposed Patch (§3.1 step 6).
 
-    Intra-batch dedup first, then: exact-name canonical match -> reuse the canonical
-    id (plus UpdateNodeProps for gap-filling properties). No match -> CreateNode.
-    Relation already in canonical between the same endpoints -> ReinforceEdge;
-    otherwise AssertEdge with an edge_absent precondition so a concurrent commit
+    Intra-batch dedup first, then per entity: rules (exact name) -> embedding cosine
+    -> LLM judge. Rules match -> reuse the canonical id directly (plus UpdateNodeProps
+    for gap-filling properties); embedding/LLM match -> MergeInto (SAME_AS provenance,
+    reviewable); no match -> CreateNode. Predicates are paraphrase-normalized before
+    correlation, so a known predicate reinforces instead of duplicating. AssertEdge
+    between existing nodes carries an edge_absent precondition so a concurrent commit
     re-queues instead of duplicating.
     """
+    from kgi.models import MergeInto
+    from kgi.resolution import normalize_predicate, resolve_entity
     from kgi.stores.neo4j import CanonicalGraph
+    from kgi.stores.qdrant import EntityVectors, PredicateVectors
 
     graph = CanonicalGraph()
+    entity_vectors, predicate_vectors = EntityVectors(), PredicateVectors()
     ops: list[RoutedOp] = []
     signals: dict[str, dict] = {}
     refs: dict[str, NodeRef] = {}  # temp_id -> how edges should reference this entity
@@ -176,27 +182,49 @@ def resolve_node(state: IngestState) -> dict:
 
     try:
         for ent in entities:
-            # Name-only lookup: an exact-name/different-type pair is precisely the
-            # ambiguity the embedding/LLM tiers own, not the rules tier.
-            match = graph.find_by_name(ent.name)
+            result = resolve_entity(ent, graph, entity_vectors)
             is_new_type = ent.entity_type in new_types
-            if match:
-                refs[ent.temp_id] = NodeRef(canonical_id=match["id"])
+            if result.canonical_id and result.method == "rules":
+                refs[ent.temp_id] = NodeRef(canonical_id=result.canonical_id)
+                match = graph.get_node(result.canonical_id) or {}
                 gap_props = {k: v for k, v in ent.properties.items() if k not in match}
                 if gap_props:
                     _add(
                         UpdateNodeProps(
                             op_id=f"op_{uuid.uuid4().hex[:12]}",
-                            canonical_id=match["id"],
+                            canonical_id=result.canonical_id,
                             properties=gap_props,
                             preconditions=[
-                                Precondition(kind="node_exists", subject=match["id"])
+                                Precondition(kind="node_exists", subject=result.canonical_id)
                             ],
                             rationale=f"extends existing '{ent.name}' with {sorted(gap_props)}",
                         ),
                         extraction=ent.extraction_confidence, resolution=1.0,
                         new_type=is_new_type, support=len(ent.evidence),
                     )
+            elif result.canonical_id:
+                # Non-trivial match (embedding/LLM): reviewable MergeInto for
+                # SAME_AS provenance; edges land on the canonical node.
+                refs[ent.temp_id] = NodeRef(canonical_id=result.canonical_id)
+                canonical_name = (graph.get_node(result.canonical_id) or {}).get("name", "?")
+                _add(
+                    MergeInto(
+                        op_id=f"op_{uuid.uuid4().hex[:12]}",
+                        temp_id=ent.temp_id,
+                        canonical_id=result.canonical_id,
+                        match_score=result.score,
+                        match_method=result.method,
+                        preconditions=[
+                            Precondition(kind="node_exists", subject=result.canonical_id)
+                        ],
+                        rationale=(
+                            f"'{ent.name}' resolved to existing '{canonical_name}' "
+                            f"({result.method}, {result.score:.2f})"
+                        ),
+                    ),
+                    extraction=ent.extraction_confidence, resolution=result.score,
+                    new_type=is_new_type, support=len(ent.evidence),
+                )
             else:
                 op_id = f"op_{uuid.uuid4().hex[:12]}"
                 refs[ent.temp_id] = NodeRef(temp_id=ent.temp_id)
@@ -214,6 +242,7 @@ def resolve_node(state: IngestState) -> dict:
                 )
 
         for rel in relations:
+            rel.predicate = normalize_predicate(rel.predicate, predicate_vectors)
             subj, obj = refs[rel.subject_temp_id], refs[rel.object_temp_id]
             if subj.canonical_id and obj.canonical_id:
                 existing = graph.edges_between(subj.canonical_id, obj.canonical_id, rel.predicate)
@@ -258,6 +287,8 @@ def resolve_node(state: IngestState) -> dict:
             )
     finally:
         graph.close()
+        entity_vectors.close()
+        predicate_vectors.close()
 
     patch = Patch(
         patch_id=f"patch_{uuid.uuid4().hex[:12]}",
@@ -361,6 +392,23 @@ def commit_node(state: IngestState) -> dict:
         if not report.requeued:
             doc = state["ndoc"].doc
             graph.mark_document_committed(doc.doc_id, doc.content_hash, doc.source_uri)
+        if report.committed:
+            # Index only what survived the gate: committed entities + predicates
+            # become searchable for the next document's resolution cascade.
+            from kgi.stores.qdrant import EntityVectors, PredicateVectors
+
+            entity_vectors, predicate_vectors = EntityVectors(), PredicateVectors()
+            try:
+                for node in graph.nodes_written_by_patch(state["patch"].patch_id):
+                    if node.get("name"):
+                        entity_vectors.upsert_entity(
+                            node["id"], node["name"], node.get("entity_type", "")
+                        )
+                for predicate in graph.predicates_written_by_patch(state["patch"].patch_id):
+                    predicate_vectors.upsert_predicate(predicate)
+            finally:
+                entity_vectors.close()
+                predicate_vectors.close()
     finally:
         graph.close()
         staging.close()

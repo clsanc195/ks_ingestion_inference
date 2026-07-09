@@ -118,6 +118,26 @@ class CanonicalGraph(_Base):
             )
             return [{**dict(rec["r"]), "object_id": rec["object_id"]} for rec in result]
 
+    def nodes_written_by_patch(self, patch_id: str) -> list[dict]:
+        """Canonical nodes a committed patch wrote — the commit node indexes these
+        into the entity vector store (only gate-approved facts get embedded)."""
+        with self.session() as s:
+            result = s.run(
+                "MATCH (:AppliedOp {patch_id: $pid})-[:WROTE]->(n:Canonical) "
+                "RETURN DISTINCT n",
+                pid=patch_id,
+            )
+            return [dict(rec["n"]) for rec in result]
+
+    def predicates_written_by_patch(self, patch_id: str) -> list[str]:
+        with self.session() as s:
+            result = s.run(
+                "MATCH (a:AppliedOp {patch_id: $pid}) WHERE a.edge_id IS NOT NULL "
+                "MATCH ()-[r:REL {id: a.edge_id}]->() RETURN DISTINCT r.predicate AS p",
+                pid=patch_id,
+            )
+            return [rec["p"] for rec in result]
+
     def subgraph_for_review(self, canonical_ids: list[str], hops: int = 1) -> dict:
         """Neighborhood snapshot shown as the 'current' side of the review diff (L9)."""
         with self.session() as s:
