@@ -118,6 +118,21 @@ class CanonicalGraph(_Base):
             )
             return [{**dict(rec["r"]), "object_id": rec["object_id"]} for rec in result]
 
+    def known_predicates(self) -> list[str]:
+        """Distinct predicates in canonical — extraction guidance (L2) so new documents
+        reuse existing vocabulary instead of coining paraphrases."""
+        with self.session() as s:
+            return [r["p"] for r in s.run(
+                "MATCH ()-[r:REL]->() RETURN DISTINCT r.predicate AS p ORDER BY p"
+            )]
+
+    def known_entity_types(self) -> list[str]:
+        with self.session() as s:
+            return [r["t"] for r in s.run(
+                "MATCH (n:Canonical) WHERE n.entity_type IS NOT NULL "
+                "RETURN DISTINCT n.entity_type AS t ORDER BY t"
+            )]
+
     def nodes_written_by_patch(self, patch_id: str) -> list[dict]:
         """Canonical nodes a committed patch wrote — the commit node indexes these
         into the entity vector store (only gate-approved facts get embedded)."""

@@ -32,7 +32,6 @@ from kgi.models import (
     OpStatus,
     Patch,
     Precondition,
-    ReinforceEdge,
     RouteTarget,
     UpdateNodeProps,
 )
@@ -92,17 +91,27 @@ def extract_node(state: IngestState) -> dict:
     Ground-truth triples (BPMN) bypass the LLM entirely."""
     from kgi.extraction import extract_unit, ground_truth_candidates
     from kgi.schema import SchemaManager
+    from kgi.stores.neo4j import CanonicalGraph
 
     schema = SchemaManager()
+    graph = CanonicalGraph()
+    try:
+        # Guidance vocabulary = seed ontology + what canonical already uses, so new
+        # documents reuse existing types/predicates instead of coining paraphrases.
+        known_types = sorted({*schema.known_types, *graph.known_entity_types()})
+        known_predicates = sorted({*schema.known_predicates, *graph.known_predicates()})
+    finally:
+        graph.close()
+
     entities, relations = ground_truth_candidates(state["ndoc"])
     for unit in state["units"]:
-        ents, rels = extract_unit(unit, schema.known_types, schema.known_predicates)
+        ents, rels = extract_unit(unit, known_types, known_predicates)
         entities.extend(ents)
         relations.extend(rels)
 
-    new_types = sorted(
-        {e.entity_type for e in entities if schema.is_new_type(e.entity_type)}
-    )
+    # "New" = never approved: not in the seed ontology and not already in canonical
+    # (canonical types passed review once — they don't need re-gating per mention).
+    new_types = sorted({e.entity_type for e in entities} - set(known_types))
     return {"entities": entities, "relations": relations, "new_types": new_types}
 
 
@@ -155,6 +164,7 @@ def resolve_node(state: IngestState) -> dict:
     between existing nodes carries an edge_absent precondition so a concurrent commit
     re-queues instead of duplicating.
     """
+    from kgi.conflict import correlate_relation
     from kgi.models import MergeInto
     from kgi.resolution import normalize_predicate, resolve_entity
     from kgi.stores.neo4j import CanonicalGraph
@@ -169,13 +179,14 @@ def resolve_node(state: IngestState) -> dict:
     new_types = set(state.get("new_types", []))
 
     def _add(op, *, extraction: float, resolution: float, new_type: bool,
-             support: int = 1) -> None:
+             support: int = 1, semantic: bool = False) -> None:
         ops.append(RoutedOp(op=op, route=RouteTarget.review))
         signals[op.op_id] = {
             "extraction": extraction,
             "resolution": resolution,
             "new_type": new_type,
             "support": support,
+            "semantic": semantic,
         }
 
     entities, relations = _dedupe_batch(state["entities"], state["relations"])
@@ -241,34 +252,34 @@ def resolve_node(state: IngestState) -> dict:
                     new_type=is_new_type, support=len(ent.evidence),
                 )
 
+        names_by_temp = {e.temp_id: e.name for e in entities}
         for rel in relations:
             rel.predicate = normalize_predicate(rel.predicate, predicate_vectors)
             subj, obj = refs[rel.subject_temp_id], refs[rel.object_temp_id]
-            if subj.canonical_id and obj.canonical_id:
-                existing = graph.edges_between(subj.canonical_id, obj.canonical_id, rel.predicate)
-                if existing:
-                    _add(
-                        ReinforceEdge(
-                            op_id=f"op_{uuid.uuid4().hex[:12]}",
-                            canonical_edge_id=existing[0]["id"],
-                            preconditions=[
-                                Precondition(kind="edge_exists", subject=existing[0]["id"])
-                            ],
-                            rationale=f"another source asserts {rel.predicate}",
-                        ),
-                        extraction=rel.extraction_confidence, resolution=1.0,
-                        new_type=False, support=len(rel.evidence),
-                    )
-                    continue
-            preconditions = []
-            if subj.canonical_id and obj.canonical_id:
-                preconditions.append(
-                    Precondition(
-                        kind="edge_absent",
-                        subject=subj.canonical_id,
-                        expected={"predicate": rel.predicate, "object_id": obj.canonical_id},
-                    )
+            if subj.canonical_id:
+                # Canonical subject: full correlation, including contradiction
+                # detection against its existing edges (L6). The object may be new
+                # this patch — that's the typical contradiction shape.
+                object_name = (
+                    names_by_temp.get(rel.object_temp_id, "?")
+                    if obj.temp_id
+                    else (graph.get_node(obj.canonical_id) or {}).get("name", "?")
                 )
+                depends = [dep_of[rel.object_temp_id]] if obj.temp_id else []
+                _outcome, correlated = correlate_relation(
+                    graph, rel, subj.canonical_id, obj, object_name, depends
+                )
+                for item in correlated:
+                    _add(
+                        item.op,
+                        extraction=rel.extraction_confidence,
+                        resolution=item.resolution,
+                        new_type=False, support=len(rel.evidence),
+                        semantic=item.semantic,
+                    )
+                continue
+            # New subject: it can't have existing edges, so nothing to contradict —
+            # plain assertion, dependent on its CreateNode ops.
             depends = [dep_of[t] for t in (rel.subject_temp_id, rel.object_temp_id)
                        if t in dep_of]
             _add(
@@ -316,7 +327,11 @@ def score_route_node(state: IngestState) -> dict:
             resolution_score=sig["resolution"],
             validation_passed=not sig["new_type"],
         )
-        routed.route = route_op(routed.op, introduces_new_type=sig["new_type"])
+        routed.route = route_op(
+            routed.op,
+            introduces_new_type=sig["new_type"],
+            is_semantic_conflict=sig.get("semantic", False),
+        )
         if routed.route == RouteTarget.auto_approve:
             routed.status = OpStatus.approved
         elif routed.route == RouteTarget.auto_reject:

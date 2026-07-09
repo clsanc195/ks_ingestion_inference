@@ -57,9 +57,18 @@ which keeps them distinct. Predicate paraphrases ("is chief executive officer of
 Entity/predicate vectors (Qdrant, local fastembed embeddings) are indexed at commit
 time only — staged candidates are never searchable.
 
+The **conflict engine implements the §7 tiered contradiction policy**: a staged
+relation whose canonical subject already has a same-predicate edge to a different
+object is LLM-adjudicated (conservative prompt — unclear evidence defaults to
+semantic conflict, because a wrong supersession silently rewrites history). Temporal
+supersessions auto-build `InvalidateEdge(valid_to) + AssertEdge` (bi-temporal, history
+preserved); semantic conflicts force-route both ops to human review. Extraction is
+guided by canonical's live vocabulary (types + predicates), so repeat documents reuse
+terms instead of coining paraphrases.
+
 Remaining stubs, in suggested build order:
 
-1. `conflict/engine.py` correlation → contradiction detection → bi-temporal ops
-2. `cli.py pending`/`review` — terminal review loop before investing in the web UI
-3. `schema/manager.py` persistence + type-curation pass (currently in-memory)
+1. `cli.py pending`/`review` — terminal review loop before investing in the web UI
+2. `schema/manager.py` persistence + type-curation pass (currently in-memory)
+3. Retrieval layer (L13) + eval harness (L15)
 ```
