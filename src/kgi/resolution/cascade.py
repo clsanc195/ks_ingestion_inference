@@ -50,34 +50,22 @@ corrupts the graph and is much harder to detect than a duplicate."""
 def _llm_tier(entity: CandidateEntity, candidates: list[dict]) -> MatchResult:
     """LLM pairwise judgment for the ambiguous margin only — the expensive tier
     reserved for the hard 5-10% (§6.1)."""
-    import anthropic
-    import instructor
-    from dotenv import load_dotenv
+    from kgi.llm import structured_call
 
-    from kgi.config import settings
-
-    load_dotenv()
-    client = instructor.from_anthropic(anthropic.Anthropic())
     lines = [
         f"- canonical_id={c['canonical_id']!r} name={c['name']!r} "
         f"type={c['entity_type']!r} (cosine {c['score']:.2f})"
         for c in candidates
     ]
     evidence = "; ".join(s.quote for s in entity.evidence[:3])
-    judgment = client.chat.completions.create(
-        model=settings().extraction_model,
-        max_tokens=1024,
-        response_model=_MatchJudgment,
-        messages=[
-            {"role": "system", "content": _JUDGE_SYSTEM},
-            {
-                "role": "user",
-                "content": (
-                    f"NEW entity: name={entity.name!r} type={entity.entity_type!r}\n"
-                    f"Evidence: {evidence!r}\n\nCANONICAL candidates:\n" + "\n".join(lines)
-                ),
-            },
-        ],
+    judgment = structured_call(
+        "resolution-judge",
+        _MatchJudgment,
+        system=_JUDGE_SYSTEM,
+        user=(
+            f"NEW entity: name={entity.name!r} type={entity.entity_type!r}\n"
+            f"Evidence: {evidence!r}\n\nCANONICAL candidates:\n" + "\n".join(lines)
+        ),
     )
     valid_ids = {c["canonical_id"] for c in candidates}
     if judgment.same_as_canonical_id in valid_ids:

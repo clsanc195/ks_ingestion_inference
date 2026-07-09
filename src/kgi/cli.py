@@ -47,9 +47,15 @@ def ingest(path: Path, thread_id: str = typer.Option(None, help="Resume-able run
     if modality is None:
         raise typer.BadParameter(f"unsupported file type: {path.suffix}")
 
+    from kgi import observability
+
     thread = thread_id or f"ingest_{uuid.uuid4().hex[:10]}"
     with durable_pipeline() as pipeline:
-        config = {"configurable": {"thread_id": thread}}
+        config = {
+            "configurable": {"thread_id": thread},
+            "callbacks": observability.langgraph_callbacks(),
+            "metadata": {"langfuse_session_id": thread, "source": str(path)},
+        }
         result = pipeline.invoke(
             {"source_path": str(path), "modality": modality}, config
         )
@@ -155,8 +161,14 @@ def review(
                 }
             # defer: no decision recorded; op stays pending and is held back at commit
 
+    from kgi import observability
+
     with durable_pipeline() as pipeline:
-        config = {"configurable": {"thread_id": thread}}
+        config = {
+            "configurable": {"thread_id": thread},
+            "callbacks": observability.langgraph_callbacks(),
+            "metadata": {"langfuse_session_id": thread, "patch_id": patch_id},
+        }
         result = pipeline.invoke(Command(resume=decisions), config)
     _print_report(result)
 

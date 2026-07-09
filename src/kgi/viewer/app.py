@@ -151,6 +151,7 @@ def create_app() -> FastAPI:
         browser-side face of the HITL gate. Omitted ops are deferred."""
         from langgraph.types import Command
 
+        from kgi import observability
         from kgi.pipeline import durable_pipeline
 
         thread = staging.thread_for_patch(patch_id)
@@ -161,7 +162,11 @@ def create_app() -> FastAPI:
             for op_id, d in req.decisions.items()
         }
         with durable_pipeline() as pipeline:
-            config = {"configurable": {"thread_id": thread}}
+            config = {
+                "configurable": {"thread_id": thread},
+                "callbacks": observability.langgraph_callbacks(),
+                "metadata": {"langfuse_session_id": thread, "patch_id": patch_id},
+            }
             result = pipeline.invoke(Command(resume=decisions), config)
         return result.get("commit_report", {})
 

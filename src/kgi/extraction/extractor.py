@@ -7,12 +7,9 @@ candidates that are themselves HITL-gated (L3).
 
 import uuid
 
-import anthropic
-import instructor
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from kgi.config import settings
+from kgi.llm import structured_call
 from kgi.models import CandidateEntity, CandidateRelation, EvidenceSpan, ExtractionUnit
 
 PROMPT_VERSION = "v1"
@@ -53,22 +50,15 @@ def extract_unit(
     known_types: list[str],
     known_predicates: list[str],
 ) -> tuple[list[CandidateEntity], list[CandidateRelation]]:
-    load_dotenv()  # ANTHROPIC_API_KEY may live in .env rather than the shell
-    client = instructor.from_anthropic(anthropic.Anthropic())
-    result = client.chat.completions.create(
-        model=settings().extraction_model,
+    result = structured_call(
+        "extract-unit",
+        _ExtractionResult,
+        system=_SYSTEM.format(
+            types=", ".join(known_types) or "(none yet)",
+            predicates=", ".join(known_predicates) or "(none yet)",
+        ),
+        user=f"Context: {unit.context}\n\nText:\n{unit.text}",
         max_tokens=4096,
-        response_model=_ExtractionResult,
-        messages=[
-            {
-                "role": "system",
-                "content": _SYSTEM.format(
-                    types=", ".join(known_types) or "(none yet)",
-                    predicates=", ".join(known_predicates) or "(none yet)",
-                ),
-            },
-            {"role": "user", "content": f"Context: {unit.context}\n\nText:\n{unit.text}"},
-        ],
     )
 
     def _span(quote: str) -> EvidenceSpan:

@@ -85,32 +85,20 @@ def _adjudicate(
     new_fact: str,
     relation: CandidateRelation,
 ) -> _ConflictJudgment:
-    import anthropic
-    import instructor
-    from dotenv import load_dotenv
+    from kgi.llm import structured_call
 
-    from kgi.config import settings
-
-    load_dotenv()
-    client = instructor.from_anthropic(anthropic.Anthropic())
     evidence = "; ".join(s.quote for s in relation.evidence[:3])
-    return client.chat.completions.create(
-        model=settings().extraction_model,
-        max_tokens=1024,
-        response_model=_ConflictJudgment,
-        messages=[
-            {"role": "system", "content": _ADJUDICATOR_SYSTEM},
-            {
-                "role": "user",
-                "content": (
-                    f"EXISTING fact: {old_fact}"
-                    f"  valid_from={old_edge.get('valid_from')!r}"
-                    f"  supported by {old_edge.get('support', 1)} source(s)\n"
-                    f"NEW fact: {new_fact}  valid_from={relation.valid_from!r}\n"
-                    f"NEW fact evidence: {evidence!r}"
-                ),
-            },
-        ],
+    return structured_call(
+        "conflict-adjudicator",
+        _ConflictJudgment,
+        system=_ADJUDICATOR_SYSTEM,
+        user=(
+            f"EXISTING fact: {old_fact}"
+            f"  valid_from={old_edge.get('valid_from')!r}"
+            f"  supported by {old_edge.get('support', 1)} source(s)\n"
+            f"NEW fact: {new_fact}  valid_from={relation.valid_from!r}\n"
+            f"NEW fact evidence: {evidence!r}"
+        ),
     )
 
 
