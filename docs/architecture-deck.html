@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kgi — Architecture</title>
+<style>
+  :root {
+    --bg: #fafbfc; --panel: #ffffff; --panel-2: #f2f4f6;
+    --ink: #0e1116; --ink-2: #48505c; --ink-3: #848d9b;
+    --line: #e5e8ec; --line-2: #cfd5db;
+    --accent: #0b7e99; --accent-bright: #0a94b5; --accent-dim: rgba(11,126,153,.08);
+    --gate: #b45309; --gate-dim: rgba(180,83,9,.09);
+    --hist: #a13d3d;
+    --n1: #2a78d6; --n2: #1baf7a; --n3: #eda100; --n5: #4a3aa7;
+    --shadow: 0 1px 2px rgba(14,17,22,.05);
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg: #0c0f13; --panel: #12161c; --panel-2: #181d24;
+    --ink: #e9ecef; --ink-2: #a3adba; --ink-3: #67717f;
+    --line: #222933; --line-2: #333c48;
+    --accent: #2fb6cf; --accent-bright: #4fc9df; --accent-dim: rgba(47,182,207,.10);
+    --gate: #dd9433; --gate-dim: rgba(221,148,51,.12);
+    --hist: #d07878;
+    --n1: #3987e5; --n2: #199e70; --n3: #c98500; --n5: #9085e9;
+    --shadow: none;
+  }}
+  :root[data-theme="light"] {
+    --bg: #fafbfc; --panel: #ffffff; --panel-2: #f2f4f6;
+    --ink: #0e1116; --ink-2: #48505c; --ink-3: #848d9b;
+    --line: #e5e8ec; --line-2: #cfd5db;
+    --accent: #0b7e99; --accent-bright: #0a94b5; --accent-dim: rgba(11,126,153,.08);
+    --gate: #b45309; --gate-dim: rgba(180,83,9,.09);
+    --hist: #a13d3d;
+    --n1: #2a78d6; --n2: #1baf7a; --n3: #eda100; --n5: #4a3aa7;
+    --shadow: 0 1px 2px rgba(14,17,22,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c0f13; --panel: #12161c; --panel-2: #181d24;
+    --ink: #e9ecef; --ink-2: #a3adba; --ink-3: #67717f;
+    --line: #222933; --line-2: #333c48;
+    --accent: #2fb6cf; --accent-bright: #4fc9df; --accent-dim: rgba(47,182,207,.10);
+    --gate: #dd9433; --gate-dim: rgba(221,148,51,.12);
+    --hist: #d07878;
+    --n1: #3987e5; --n2: #199e70; --n3: #c98500; --n5: #9085e9;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15.5px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; grid-template-columns: 216px minmax(0, 1fr);
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* ── left rail ─────────────────────────────── */
+  aside {
+    position: sticky; top: 0; height: 100vh; align-self: start;
+    border-right: 1px solid var(--line); padding: 28px 0 24px;
+    display: flex; flex-direction: column; background: var(--bg);
+  }
+  .brand {
+    font: 700 15px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .02em; padding: 0 24px 22px; color: var(--ink);
+  }
+  .brand em { font-style: normal; color: var(--accent); }
+  aside nav { display: flex; flex-direction: column; overflow-y: auto; }
+  aside nav a {
+    font: 11.5px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-3); text-decoration: none;
+    padding: 9px 24px; border-left: 2px solid transparent;
+    display: flex; gap: 12px; align-items: baseline;
+  }
+  aside nav a .idx { color: var(--line-2); font-size: 10px; min-width: 16px; }
+  aside nav a:hover, aside nav a:focus-visible {
+    color: var(--ink); border-left-color: var(--accent); outline: none;
+  }
+  aside nav a:hover .idx { color: var(--accent); }
+  .rail-foot { margin-top: auto; padding: 20px 24px 0; font: 10.5px/1.7 ui-monospace, Menlo, monospace; color: var(--ink-3); }
+
+  @media (max-width: 900px) {
+    body { grid-template-columns: 1fr; }
+    aside { position: sticky; height: auto; flex-direction: row; align-items: center;
+      border-right: none; border-bottom: 1px solid var(--line); padding: 10px 16px; z-index: 20; }
+    .brand { padding: 0 14px 0 0; }
+    aside nav { flex-direction: row; overflow-x: auto; }
+    aside nav a { padding: 8px 10px; border-left: none; white-space: nowrap; }
+    aside nav a .idx { display: none; }
+    .rail-foot { display: none; }
+  }
+
+  /* ── content ───────────────────────────────── */
+  main { max-width: 980px; padding: 0 clamp(20px, 5vw, 64px); }
+  section.page { padding: 76px 0 64px; border-bottom: 1px solid var(--line); }
+  section.page:last-of-type { border-bottom: none; }
+
+  .kicker {
+    font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--accent);
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  }
+  .kicker::after { content: ""; height: 1px; width: 44px; background: var(--line-2); }
+
+  h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1.03; font-weight: 800; letter-spacing: -0.03em; text-wrap: balance; }
+  h2 { font-size: clamp(25px, 3.2vw, 33px); line-height: 1.12; font-weight: 750; letter-spacing: -0.022em; text-wrap: balance; margin-bottom: 20px; }
+  h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; margin: 30px 0 10px; }
+  p { max-width: 68ch; margin-bottom: 13px; color: var(--ink-2); }
+  p.lede { font-size: 18px; line-height: 1.6; color: var(--ink-2); max-width: 58ch; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .84em;
+    background: var(--panel-2); border: 1px solid var(--line);
+    padding: 1px 5px; border-radius: 5px; color: var(--ink);
+  }
+  pre {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 18px; overflow-x: auto; margin: 16px 0;
+    font: 12.5px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink-2);
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; }
+
+  /* hero */
+  #cover { position: relative; min-height: 78vh; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+  #cover .lede { margin-top: 20px; }
+  .hero-net { position: absolute; right: -40px; top: 0; height: 100%; width: min(52%, 480px); opacity: .5; pointer-events: none; }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    margin-top: 44px; overflow: hidden; max-width: 720px; box-shadow: var(--shadow);
+  }
+  .meta-grid > div { padding: 14px 18px; border-right: 1px solid var(--line); }
+  .meta-grid > div:last-child { border-right: none; }
+  .meta-grid b { display: block; font: 600 10px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 7px; }
+  .meta-grid span { font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 700px) { .meta-grid > div { border-right: none; border-bottom: 1px solid var(--line); } .meta-grid > div:last-child { border-bottom: none; } }
+
+  /* tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin: 18px 0; box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th {
+    font: 600 10px/1.4 ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); text-align: left; padding: 11px 16px;
+    border-bottom: 1px solid var(--line-2); background: var(--panel-2);
+  }
+  td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  td:first-child { white-space: nowrap; color: var(--ink); font-weight: 550; }
+  tr:last-child td { border-bottom: none; }
+
+  /* cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); gap: 10px; margin: 18px 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px 14px; box-shadow: var(--shadow); transition: border-color .15s;
+  }
+  .card:hover { border-color: var(--line-2); }
+  .card h4 { font: 650 14px/1.3 system-ui, sans-serif; letter-spacing: -0.01em; }
+  .card .path { font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--accent); display: block; margin: 3px 0 9px; }
+  .card p { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0; }
+
+  /* statement panels */
+  .panel {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--panel); border-radius: 10px; padding: 18px 22px 16px;
+    margin: 22px 0; max-width: 74ch; box-shadow: var(--shadow);
+  }
+  .panel .tag {
+    display: inline-block; font: 600 9.5px/1 ui-monospace, Menlo, monospace;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
+    background: var(--accent-dim); border-radius: 4px; padding: 4px 8px; margin-bottom: 10px;
+  }
+  .panel.gate { border-left-color: var(--gate); }
+  .panel.gate .tag { color: var(--gate); background: var(--gate-dim); }
+  .panel p { margin: 0; font-size: 14.5px; }
+  .panel p + p { margin-top: 8px; }
+
+  /* figures */
+  figure { margin: 26px 0; }
+  .fig-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 20px 16px 8px; box-shadow: var(--shadow); }
+  figure svg { display: block; max-width: 100%; height: auto; min-width: 700px; }
+  figcaption { font: 11px/1.6 ui-monospace, Menlo, monospace; color: var(--ink-3); padding: 10px 4px 8px; }
+
+  /* steps */
+  ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 20px 0; max-width: 76ch; }
+  ol.steps > li { counter-increment: step; position: relative; padding: 0 0 24px 54px; }
+  ol.steps > li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute; left: 0; top: 1px; width: 32px; height: 32px; border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--line-2);
+    font: 650 11px/30px ui-monospace, Menlo, monospace; text-align: center; color: var(--accent);
+  }
+  ol.steps > li::after {
+    content: ""; position: absolute; left: 16px; top: 39px; bottom: 6px; width: 1px; background: var(--line);
+  }
+  ol.steps > li:last-child::after { display: none; }
+  ol.steps li h4 { font: 650 15px/1.4 system-ui, sans-serif; margin-bottom: 4px; }
+  ol.steps li p { font-size: 14px; margin-bottom: 6px; }
+  ol.steps li.gate-step::before { color: var(--gate); border-color: var(--gate); background: var(--gate-dim); }
+
+  /* pills & lists */
+  .pill { display: inline-block; font: 650 9.5px/1 ui-monospace, Menlo, monospace; letter-spacing: .09em;
+    text-transform: uppercase; border-radius: 5px; padding: 4px 8px; }
+  .pill.built { background: var(--accent-dim); color: var(--accent); }
+  .pill.deferred { background: var(--panel-2); color: var(--ink-3); border: 1px solid var(--line); }
+  ul.tight { padding-left: 18px; margin: 10px 0 14px; max-width: 70ch; }
+  ul.tight li { margin-bottom: 7px; font-size: 14px; color: var(--ink-2); }
+  ul.tight li::marker { color: var(--accent); }
+
+  @media print {
+    body { display: block; }
+    aside { display: none; }
+    section.page { break-before: page; padding: 24px 0; }
+    section.page:first-of-type { break-before: auto; }
+    #cover { min-height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">kgi<em>_</em></div>
+  <nav aria-label="Pages">
+    <a href="#cover"><span class="idx">--</span>Cover</a>
+    <a href="#problem"><span class="idx">01</span>Problem</a>
+    <a href="#solution"><span class="idx">02</span>Solution</a>
+    <a href="#research"><span class="idx">03</span>Research</a>
+    <a href="#components"><span class="idx">04</span>Components</a>
+    <a href="#infrastructure"><span class="idx">05</span>Infrastructure</a>
+    <a href="#topology"><span class="idx">06</span>Topology</a>
+    <a href="#lifecycle"><span class="idx">07</span>Lifecycle</a>
+    <a href="#trust"><span class="idx">08</span>Trust</a>
+    <a href="#observability"><span class="idx">09</span>Observability</a>
+    <a href="#status"><span class="idx">10</span>Status</a>
+  </nav>
+  <div class="rail-foot">architecture deck<br>working prototype</div>
+</aside>
+
+<main>
+
+<!-- ══════════════════════ COVER ══════════════════════ -->
+<section class="page" id="cover">
+  <svg class="hero-net" viewBox="0 0 400 600" aria-hidden="true">
+    <g stroke="var(--accent)" stroke-opacity=".22" fill="none">
+      <path d="M60 120 L180 80 L300 150 L360 60"/>
+      <path d="M180 80 L150 240 L300 150 L330 320"/>
+      <path d="M150 240 L60 380 L220 430 L330 320"/>
+      <path d="M220 430 L180 560 M60 380 L150 240 M300 150 L150 240"/>
+      <path d="M330 320 L390 460 L220 430" stroke-dasharray="5 5" stroke="var(--hist)"/>
+    </g>
+    <g fill="var(--accent)" fill-opacity=".85">
+      <circle cx="60" cy="120" r="5"/><circle cx="180" cy="80" r="7"/>
+      <circle cx="300" cy="150" r="9"/><circle cx="360" cy="60" r="4"/>
+      <circle cx="150" cy="240" r="11"/><circle cx="60" cy="380" r="5"/>
+      <circle cx="330" cy="320" r="7"/><circle cx="220" cy="430" r="6"/>
+      <circle cx="180" cy="560" r="4"/><circle cx="390" cy="460" r="4" fill="var(--hist)"/>
+    </g>
+  </svg>
+  <div class="kicker">Architecture documentation</div>
+  <h1>A knowledge graph AI proposes<br>and humans admit.</h1>
+  <p class="lede">
+    kgi ingests heterogeneous documents, extracts candidate knowledge with LLMs, and
+    maintains a canonical graph under one invariant: <strong>nothing enters except an
+    approved commit.</strong> Every fact traces to its source, its extraction run, and
+    the human decision that admitted it.
+  </p>
+  <div class="meta-grid">
+    <div><b>Status</b><span>Working prototype, verified end-to-end</span></div>
+    <div><b>Test corpus</b><span>Bank profiles + the 2023 Credit Suisse collapse</span></div>
+    <div><b>Stack</b><span>Python · LangGraph · Neo4j · Qdrant · Claude · Langfuse</span></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 01 PROBLEM ══════════════════════ -->
+<section class="page" id="problem">
+  <div class="kicker">01 · Problem statement</div>
+  <h2>LLMs can read your documents. That doesn't make the result trustworthy.</h2>
+  <p>
+    Organizations hold their knowledge in heterogeneous documents — PDFs, Word files,
+    markdown, process diagrams, transcripts. LLMs are now good enough to read all of
+    them and propose structured facts. But naïvely piping extraction output into a
+    database produces a knowledge base nobody can rely on, for five compounding reasons:
+  </p>
+  <ul class="tight">
+    <li><strong>Extraction is noisy.</strong> Models hallucinate relations, invert
+      directions, and phrase the same fact five different ways across documents.</li>
+    <li><strong>Entities fragment.</strong> "UBS", "UBS Group AG" and "the Swiss bank"
+      become three nodes; worse, <em>GripperOne</em> and <em>GripperTwo</em> — genuinely
+      distinct things with similar names — get merged. Over-merging is the costlier
+      failure: it's nearly invisible after the fact.</li>
+    <li><strong>Knowledge changes, stores don't.</strong> A CEO is replaced; an HQ moves.
+      Append-only graphs accumulate contradictions; destructive updates erase history.</li>
+    <li><strong>No provenance, no trust.</strong> In any serious setting — finance,
+      compliance, operations — a fact that can't answer <em>"where did this come from and
+      who approved it?"</em> is a liability, not an asset.</li>
+    <li><strong>Answers inherit all of it.</strong> Retrieval over a corrupted store
+      confidently serves duplicates, stale facts, and inventions.</li>
+  </ul>
+  <p>
+    The task, precisely stated: build a system that <strong>extracts</strong> knowledge
+    from any document, <strong>correlates</strong> it against everything already known —
+    recognizing when a new fact is the <em>same</em>, <em>reinforcing</em>,
+    <em>extending</em>, or <em>contradicting</em> — and <strong>adjusts</strong> the
+    graph accordingly, with a human quality gate and full auditability, at a review
+    burden small enough to be sustainable.
+  </p>
+</section>
+
+<!-- ══════════════════════ 02 SOLUTION ══════════════════════ -->
+<section class="page" id="solution">
+  <div class="kicker">02 · Proposed solution</div>
+  <h2>A pull-request workflow for knowledge</h2>
+  <div class="panel">
+    <span class="tag">Core invariant</span>
+    <p>The canonical graph is only ever mutated by an approved commit. All inference
+    lands in a staging layer; the human review gate is the promotion boundary.
+    Everything else in the architecture exists to serve this rule.</p>
+  </div>
+  <p>
+    Extraction never writes to the graph. It compiles into a <strong>patch</strong> — a
+    dependency-ordered set of typed operations (<code>create_node</code>,
+    <code>merge_into</code>, <code>assert_edge</code>, <code>invalidate_edge</code>…)
+    diffed against current canonical. Ops are confidence-scored and routed:
+    high-confidence auto-approves, everything ambiguous queues for a human, and the run
+    parks durably at the gate — for days if needed. On approval, an idempotent commit
+    engine applies the patch and writes provenance in the same transaction.
+  </p>
+
+  <figure><div class="fig-wrap">
+  <svg viewBox="0 0 940 240" font-family="ui-monospace, Menlo, monospace" font-size="12" role="img" aria-label="Pipeline flow: document through staging, gate, canonical">
+    <defs>
+      <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+      </marker>
+    </defs>
+    <rect x="8" y="34" width="620" height="120" rx="10" fill="none" stroke="var(--line-2)" stroke-dasharray="4 4"/>
+    <text x="20" y="24" fill="var(--ink-3)" letter-spacing="1">INFERENCE — STAGING ONLY, NOTHING TRUSTED</text>
+    <g text-anchor="middle" fill="var(--ink)">
+      <rect x="24" y="66" width="82" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="65" y="90">parse +</text><text x="65" y="105">extract</text>
+      <rect x="140" y="66" width="98" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="189" y="90">resolve</text><text x="189" y="105">entities</text>
+      <rect x="272" y="66" width="98" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="321" y="90">correlate /</text><text x="321" y="105">conflicts</text>
+      <rect x="404" y="66" width="90" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="449" y="90">score +</text><text x="449" y="105">route</text>
+      <rect x="528" y="66" width="82" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="569" y="90">staged</text><text x="569" y="105">patch</text>
+    </g>
+    <g stroke="var(--ink-3)" marker-end="url(#arr)" fill="none">
+      <line x1="106" y1="94" x2="136" y2="94"/>
+      <line x1="238" y1="94" x2="268" y2="94"/>
+      <line x1="370" y1="94" x2="400" y2="94"/>
+      <line x1="494" y1="94" x2="524" y2="94"/>
+      <line x1="610" y1="94" x2="656" y2="94"/>
+      <line x1="742" y1="94" x2="788" y2="94"/>
+    </g>
+    <rect x="660" y="58" width="78" height="72" rx="8" fill="var(--gate-dim)" stroke="var(--gate)" stroke-width="1.5"/>
+    <text x="699" y="88" text-anchor="middle" fill="var(--gate)" font-weight="bold">HUMAN</text>
+    <text x="699" y="104" text-anchor="middle" fill="var(--gate)" font-weight="bold">GATE</text>
+    <rect x="792" y="58" width="132" height="72" rx="8" fill="var(--accent-dim)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="858" y="84" text-anchor="middle" fill="var(--accent)" font-weight="bold">CANONICAL</text>
+    <text x="858" y="100" text-anchor="middle" fill="var(--accent)">graph + vectors</text>
+    <text x="858" y="116" text-anchor="middle" fill="var(--accent)">+ provenance</text>
+    <path d="M 858 134 L 858 196 L 189 196 L 189 130" stroke="var(--ink-3)" stroke-dasharray="4 4" fill="none" marker-end="url(#arr)"/>
+    <text x="480" y="212" text-anchor="middle" fill="var(--ink-3)">committed entities + vocabulary guide the NEXT document's resolution and extraction</text>
+    <text x="18" y="180" fill="var(--ink-3)">document ▸</text>
+  </svg>
+  </div>
+  <figcaption>FIG 1 — every mutation flows left to right through the gate; the dashed loop is why the graph gets better at absorbing documents as it grows</figcaption>
+  </figure>
+
+  <h3>The five design decisions that shape everything else</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Decision</th><th>Choice</th><th>Consequence</th></tr>
+    <tr><td>Domain scope</td><td>Open-domain</td><td>No fixed ontology; a thin upper seed plus induced types, each type itself human-gated.</td></tr>
+    <tr><td>Contradictions</td><td>Tiered</td><td>Value-changed-over-time auto-reconciles bi-temporally; incompatible same-time claims always escalate to a human.</td></tr>
+    <tr><td>Reversibility</td><td>Reversible merges; forward-fix the rest</td><td>Merges never destroy nodes (<code>SAME_AS</code> provenance); other mistakes are corrected by new reviewed patches, never edits.</td></tr>
+    <tr><td>Review staleness</td><td>No expiry; rebase at commit</td><td>Parked patches never rot: preconditions are re-verified at commit; a stale diff re-queues instead of applying blind.</td></tr>
+    <tr><td>Curation</td><td>Single curator (v1)</td><td>No assignment machinery; reviewer identity recorded from day one so a team needs no migration.</td></tr>
+  </table></div>
+</section>
+
+<!-- ══════════════════════ 03 RESEARCH ══════════════════════ -->
+<section class="page" id="research">
+  <div class="kicker">03 · Research foundations</div>
+  <h2>What the literature contributed — and where this design departs</h2>
+  <p>
+    Each layer borrows its strongest available idea from published work. The synthesis —
+    treating the HITL gate as a <em>promotion boundary</em> with patch semantics, rebase
+    checks, and commit-time provenance — is the part not found in any single system below.
+  </p>
+  <div class="table-wrap"><table>
+    <tr><th>Publication / system</th><th>Idea adopted</th><th>Where it lives here</th></tr>
+    <tr><td>Edge et&nbsp;al. — GraphRAG (2024)</td><td>LLM-built graphs as retrieval substrate; local/global search framing</td><td>Retrieval layer (local search implemented; community summaries deferred)</td></tr>
+    <tr><td>Lairgi et&nbsp;al. — iText2KG (WISE 2024)</td><td>Incremental construction; embedding-cosine entity resolution</td><td>Resolution cascade tier 2 — thresholds recalibrated after measuring real collision pairs</td></tr>
+    <tr><td>Rasmussen et&nbsp;al. — Graphiti / Zep (2025)</td><td>Bi-temporal edges: validity windows instead of deletion</td><td>Conflict engine — <code>valid_from / valid_to</code> on every fact; as-of queries</td></tr>
+    <tr><td>ATOM (arXiv 2510.22590)</td><td>Atomic-fact decomposition for extraction precision</td><td>Decomposition — designed seam; v1 ships paragraph units, atomizer is the upgrade path</td></tr>
+    <tr><td>Bai et&nbsp;al. — AutoSchemaKG (arXiv 2505.23628)</td><td>Dynamic schema induction from the corpus</td><td>Schema strategy — induced types allowed, but gated, under a thin upper ontology</td></tr>
+    <tr><td>SCICERO + HITL-validation line (2025)</td><td>Source-support counts as confidence signal; human validation loops</td><td>Confidence scorer (support term) and the review gate itself</td></tr>
+    <tr><td>Less is More — Denoising KGs for RAG (arXiv 2510.14271)</td><td>Entity resolution as quality control, not just dedup</td><td>Justifies the expensive LLM judge tier and the conservative no-merge default</td></tr>
+    <tr><td>Guo et&nbsp;al. — LightRAG (2024); survey arXiv 2510.20345</td><td>Design-space mapping; cost-tier awareness</td><td>Informed the layer-by-layer option analysis in the design doc</td></tr>
+    <tr><td>Neo4j LLM Knowledge Graph Builder</td><td>Reference extraction→Neo4j plumbing</td><td>Baseline the staging/commit split deliberately improves on</td></tr>
+  </table></div>
+  <p>
+    Two departures worth naming. Most published pipelines write extraction output
+    directly to the store and treat cleanup as post-processing; here nothing is written
+    until reviewed, which converts quality control from batch repair into a gate. And
+    cosine matching is used only as a <em>tier</em>: measurement showed true aliases
+    score ~0.99 while distinct siblings score ~0.87, so the ambiguous band escalates to
+    an LLM judge prompted to refuse uncertain merges.
+  </p>
+</section>
+
+<!-- ══════════════════════ 04 COMPONENTS ══════════════════════ -->
+<section class="page" id="components">
+  <div class="kicker">04 · Components</div>
+  <h2>Eleven components, one module each</h2>
+  <p>
+    The package mirrors the architecture: every stage is an importable module with one
+    responsibility. All LLM usage funnels through a single traced entry point
+    (<code>kgi/llm.py</code>), and only one component is allowed to write to canonical.
+  </p>
+  <div class="cards">
+    <div class="card"><h4>Ingestion</h4><span class="path">kgi/ingestion</span>
+      <p>Pluggable per-format parsers → normalized blocks. BPMN parses as ground truth (it is already a typed graph) and skips LLM extraction entirely. Content-hash registration makes re-ingestion a no-op.</p></div>
+    <div class="card"><h4>Decomposition</h4><span class="path">kgi/decomposition</span>
+      <p>Blocks → extraction units; headings travel as context, not content. v1 is paragraph-per-unit; the atomic-fact atomizer swaps in behind the same interface.</p></div>
+    <div class="card"><h4>Extraction</h4><span class="path">kgi/extraction</span>
+      <p>One structured LLM call per unit → candidate entities and relations, each with a verbatim evidence quote and confidence. Guided by canonical's live vocabulary so repeat documents reuse terms.</p></div>
+    <div class="card"><h4>Schema manager</h4><span class="path">kgi/schema</span>
+      <p>Thin upper ontology (Agent, Event, Artifact…) plus induced types. Never-seen types force human review regardless of confidence.</p></div>
+    <div class="card"><h4>Resolution cascade</h4><span class="path">kgi/resolution</span>
+      <p>Rules (exact name) → embedding ANN with calibrated accept/reject bands → LLM judge for the ambiguous middle. Non-trivial matches become reviewable <code>merge_into</code> ops with <code>SAME_AS</code> provenance.</p></div>
+    <div class="card"><h4>Conflict engine</h4><span class="path">kgi/conflict</span>
+      <p>Detects colliding facts on either shared endpoint (HQ moved; CEO replaced). An LLM adjudicator classifies: compatible / temporal supersession (auto bi-temporal ops) / semantic conflict (forced review).</p></div>
+    <div class="card"><h4>Confidence &amp; routing</h4><span class="path">kgi/confidence · kgi/routing</span>
+      <p>Weighted blend of extraction confidence, source support, resolution score, and schema validation → auto-approve / review / auto-reject, with force-review overrides.</p></div>
+    <div class="card"><h4>Review gate</h4><span class="path">kgi/pipeline (interrupt)</span>
+      <p>The run parks durably (Postgres checkpoint) and survives restarts. Decisions — accept, reject-with-note, defer — arrive from terminal or browser and are recorded as provenance.</p></div>
+    <div class="card"><h4>Commit engine</h4><span class="path">kgi/commit</span>
+      <p>The only writer to canonical. Idempotency ledger, rebase-checked preconditions, dependency ordering (an edge whose endpoint was rejected blocks), provenance in the same transaction.</p></div>
+    <div class="card"><h4>Retrieval</h4><span class="path">kgi/retrieval</span>
+      <p>Vector-anchored entity lookup → temporal-filtered graph expansion → grounded answers that must cite fact ids or refuse. <code>--as-of</code> reconstructs any past state.</p></div>
+    <div class="card"><h4>Viewer</h4><span class="path">kgi/viewer</span>
+      <p>FastAPI + SVG canvas: the graph, per-node provenance panels, search/ask with citation highlighting, and an actionable review queue. Approvals resume the parked run.</p></div>
+  </div>
+  <p style="font-size:13.5px">
+    Command surface: <code>kgi ingest · pending · review · search · ask · serve</code>
+  </p>
+</section>
+
+<!-- ══════════════════════ 05 INFRASTRUCTURE ══════════════════════ -->
+<section class="page" id="infrastructure">
+  <div class="kicker">05 · Infrastructure</div>
+  <h2>One system of record, three helpers</h2>
+  <p>
+    The stores are deliberately unequal. Neo4j holds everything that <em>is</em> the
+    system; the others are a rebuildable similarity index, a pause button, and a
+    telescope. Knowing which is which is most of operating it.
+  </p>
+  <div class="table-wrap"><table>
+    <tr><th>Store</th><th>Role</th><th>Contents</th><th>If lost</th></tr>
+    <tr><td>Neo4j</td><td>System of record</td>
+      <td>Canonical entities and bi-temporal facts; <code>SAME_AS</code> aliases; the
+      <code>AppliedOp</code> commit ledger; document hashes; review decisions; staged
+      patches (as JSON — never as graph structure)</td>
+      <td>Total loss. Everything else derives from it.</td></tr>
+    <tr><td>Qdrant</td><td>Similarity index</td>
+      <td>384-dim embeddings of entity <em>names</em> and predicate <em>phrases</em> only —
+      computed locally (bge-small via fastembed, no API), written only at commit time.
+      No document text, no chunks, no facts.</td>
+      <td>Zero knowledge lost; re-embed from Neo4j in minutes.</td></tr>
+    <tr><td>Postgres</td><td>Durable execution</td>
+      <td>LangGraph checkpoints — the saved state of runs parked at the review gate</td>
+      <td>Parked runs lost; staged patches survive in Neo4j.</td></tr>
+    <tr><td>Langfuse</td><td>Observability</td>
+      <td>Traces: one per command, node spans, every LLM generation with prompt, parsed
+      output, and token usage</td>
+      <td>Trace history only; no effect on the system.</td></tr>
+    <tr><td>Anthropic API</td><td>The four LLM roles</td>
+      <td>Extractor, resolution judge, conflict adjudicator, answer composer — one
+      configured model, one traced call path</td>
+      <td>Ingestion and ask pause; the graph and queries keep working.</td></tr>
+  </table></div>
+  <div class="panel">
+    <span class="tag">Not a RAG vector store</span>
+    <p>Nothing embeds document chunks. Knowledge lives as explicit, reviewed graph facts;
+    embeddings exist only to recognize that two short strings name the same thing.
+    Staged candidates are never indexed — an unreviewed fact cannot influence how the
+    next document resolves.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════ 06 TOPOLOGY ══════════════════════ -->
+<section class="page" id="topology">
+  <div class="kicker">06 · Deployment &amp; runtime topology</div>
+  <h2>Two ephemeral processes, one server, four containers</h2>
+
+  <figure><div class="fig-wrap">
+  <svg viewBox="0 0 940 330" font-family="ui-monospace, Menlo, monospace" font-size="12" role="img" aria-label="Runtime topology: host processes, docker containers, external API">
+    <defs>
+      <marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+      </marker>
+    </defs>
+    <rect x="8" y="30" width="300" height="270" rx="10" fill="none" stroke="var(--line-2)"/>
+    <text x="22" y="20" fill="var(--ink-3)" letter-spacing="1">HOST — PYTHON VENV</text>
+    <rect x="28" y="52" width="260" height="62" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="42" y="76" fill="var(--ink)">kgi CLI</text>
+    <text x="42" y="96" fill="var(--ink-3)">ephemeral · one process per command</text>
+    <rect x="28" y="130" width="260" height="62" rx="8" fill="var(--panel-2)" stroke="var(--accent)"/>
+    <text x="42" y="154" fill="var(--ink)">kgi serve (viewer)</text>
+    <text x="42" y="174" fill="var(--ink-3)">long-running · :8100</text>
+    <rect x="28" y="208" width="260" height="62" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="42" y="232" fill="var(--ink)">fastembed (bge-small)</text>
+    <text x="42" y="252" fill="var(--ink-3)">in-process embedder · no network</text>
+    <rect x="352" y="30" width="280" height="270" rx="10" fill="none" stroke="var(--line-2)"/>
+    <text x="366" y="20" fill="var(--ink-3)" letter-spacing="1">DOCKER — KGI STACK</text>
+    <g fill="var(--ink)">
+      <rect x="372" y="52" width="240" height="62" rx="8" fill="var(--accent-dim)" stroke="var(--accent)"/>
+      <text x="386" y="76">neo4j</text>
+      <text x="386" y="96" fill="var(--ink-3)">:7687 bolt · :7474 browser · volume</text>
+      <rect x="372" y="130" width="240" height="62" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="386" y="154">qdrant</text>
+      <text x="386" y="174" fill="var(--ink-3)">:6333 api + dashboard · volume</text>
+      <rect x="372" y="208" width="240" height="62" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="386" y="232">postgres (checkpoints)</text>
+      <text x="386" y="252" fill="var(--ink-3)">:5433 (5432 taken locally) · volume</text>
+    </g>
+    <rect x="676" y="30" width="256" height="130" rx="10" fill="none" stroke="var(--line-2)"/>
+    <text x="690" y="20" fill="var(--ink-3)" letter-spacing="1">DOCKER — LANGFUSE STACK</text>
+    <rect x="694" y="52" width="220" height="88" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="708" y="76" fill="var(--ink)">langfuse web :3000</text>
+    <text x="708" y="96" fill="var(--ink-3)">+ worker · clickhouse ·</text>
+    <text x="708" y="112" fill="var(--ink-3)">own postgres :5432 · redis · minio</text>
+    <rect x="676" y="192" width="256" height="108" rx="10" fill="none" stroke="var(--line-2)"/>
+    <text x="690" y="184" fill="var(--ink-3)" letter-spacing="1">EXTERNAL</text>
+    <rect x="694" y="212" width="220" height="70" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="708" y="238" fill="var(--ink)">Anthropic API</text>
+    <text x="708" y="258" fill="var(--ink-3)">https · key via .env / shell</text>
+    <g stroke="var(--ink-3)" fill="none" marker-end="url(#arr2)">
+      <line x1="308" y1="83" x2="368" y2="83"/>
+      <line x1="308" y1="161" x2="368" y2="161"/>
+      <line x1="632" y1="96" x2="690" y2="96"/>
+      <line x1="308" y1="240" x2="368" y2="240"/>
+      <path d="M 288 68 C 560 -8, 700 120, 760 208"/>
+    </g>
+  </svg>
+  </div>
+  <figcaption>FIG 2 — app code is never containerized in dev: CLI and viewer run from the venv and read .env at start; the two compose stacks are independent</figcaption>
+  </figure>
+
+  <h3>Lifecycles that matter operationally</h3>
+  <ul class="tight">
+    <li><strong>CLI commands are fresh processes</strong> — they pick up config changes
+      immediately. The <strong>viewer is not</strong>: restart it after code or
+      <code>.env</code> changes (the recurring dev gotcha).</li>
+    <li><strong>A parked run outlives every process.</strong> Ingest exits after staging;
+      days later, review resumes it from the Postgres checkpoint — CLI and browser both
+      resume the same run.</li>
+    <li><strong>All state survives restarts</strong> via named Docker volumes. The
+      integration test suite wipes the Neo4j instance it points at — a dev-only hazard,
+      flagged for isolation work.</li>
+    <li><strong>Path to production</strong>: containerize the app, move the gate's
+      durability to managed Postgres, and treat Temporal as the orchestration upgrade if
+      runs become mission-critical.</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════ 07 LIFECYCLE ══════════════════════ -->
+<section class="page" id="lifecycle">
+  <div class="kicker">07 · One use case, end to end</div>
+  <h2>The Credit Suisse arc: three documents, one honest graph</h2>
+  <p>
+    The test corpus exercises every vertical in sequence: profiles of two banks as they
+    stood in 2022, then the 2023 crisis document whose real history contradicts them,
+    then queries only a bi-temporal, provenance-carrying graph can answer.
+  </p>
+  <ol class="steps">
+    <li>
+      <h4>Ingest the 2022 Credit Suisse profile</h4>
+      <p>Hash-registered (duplicate ingest becomes a no-op) → parsed into paragraph
+      units → one extraction call per unit. On an empty graph, resolution is trivial:
+      the patch is all <code>create_node</code> / <code>assert_edge</code> ops —
+      Gottstein as CEO, Lehmann as chairman, the Archegos and Greensill losses, each
+      with an evidence quote.</p>
+    </li>
+    <li class="gate-step">
+      <h4>Park, review, commit</h4>
+      <p>Every op routes to review (all types are new to an empty graph). The run parks;
+      the curator approves in the browser queue; the commit engine applies ops in
+      dependency order, writes ledger and provenance transactionally, and only then
+      indexes entity names and predicates into Qdrant.</p>
+    </li>
+    <li>
+      <h4>Ingest the UBS profile — cross-document resolution</h4>
+      <p>"Zurich", "Investment Banking", "Asset Management" resolve to existing nodes
+      (rules tier); shared-endpoint collisions like <em>two banks headquartered in
+      Zurich</em> are adjudicated <strong>compatible</strong>. The banks are now
+      connected through shared nodes — exactly what graph-expansion retrieval will
+      exploit.</p>
+    </li>
+    <li>
+      <h4>Ingest the crisis document — the conflict engine's moment</h4>
+      <p>"Körner replaced Gottstein as CEO" arrives as a new person pointing at an
+      existing company: an object-side collision with the current Gottstein edge. The
+      adjudicator rules <strong>temporal supersession</strong> (evidence: "replaced",
+      explicit dates) and the patch pairs the new assertion with
+      <code>invalidate_edge(valid_to: 2022-07)</code>. Same for Hamers→Ermotti at UBS.
+      A flat, dateless contradiction would instead be flagged
+      <strong>semantic conflict</strong> and force-routed to the human.</p>
+    </li>
+    <li class="gate-step">
+      <h4>The curator adjudicates history</h4>
+      <p>The queue shows each supersession with the adjudicator's reasoning. On
+      approval, old edges close their validity window — nothing is deleted; the viewer
+      now draws them dashed.</p>
+    </li>
+    <li>
+      <h4>Query — current, past, and unanswerable</h4>
+      <p><code>kgi ask "Who is the CEO of Credit Suisse?"</code> → Körner, cited to the
+      crisis document. Add <code>--as-of 2021-06-01</code> → Gottstein, cited to the
+      closed edge and its sources. Ask about revenue → an explicit refusal: the answer
+      composer may only cite retrieved facts. Retrieval anchors via entity vectors and
+      expands two hops with per-edge temporal filtering.</p>
+    </li>
+  </ol>
+  <p style="font-size:13.5px">
+    Same graph, three different truthful answers — because time is part of the data
+    model, and every answer carries its receipts.
+  </p>
+</section>
+
+<!-- ══════════════════════ 08 TRUST ══════════════════════ -->
+<section class="page" id="trust">
+  <div class="kicker">08 · Trust &amp; audit model</div>
+  <h2>Every fact answers: where from, who approved, when true</h2>
+  <p>
+    The audit chain is graph structure, not log files. For any edge, one traversal
+    yields the complete story:
+  </p>
+  <pre><code>(fact edge) ⟵ AppliedOp {patch, extraction run, committed-at}
+                 ⟵ Document {source file, content hash}
+                 ⟵ ReviewDecision {reviewer, action, note, timestamp}
+                 — or "auto-approved by policy", explicitly recorded</code></pre>
+  <ul class="tight">
+    <li><strong>Bi-temporal honesty.</strong> Facts carry validity windows; contradiction
+      closes a window rather than deleting. History stays queryable and answers cite the
+      closed edge when asked about the past.</li>
+    <li><strong>Reversible merges.</strong> Entity merges keep the source identity as an
+      <code>Alias —SAME_AS→</code> record with method and score — the one mistake that is
+      hard to detect later (over-merging) stays undoable.</li>
+    <li><strong>Rejected knowledge leaves a trace.</strong> Staged patches are never
+      deleted; a rejected claim, its rationale, and the reviewer's note remain in the
+      audit trail without ever having touched canonical.</li>
+  </ul>
+  <h3>When bad facts get in anyway — the remediation playbook</h3>
+  <p>
+    A pipeline bug that admits wrong facts is a data-quality incident, and the design
+    supports the standard response: <strong>scope</strong> the blast radius from the
+    ledger (facts are queryable by run, patch, and time), <strong>quarantine</strong> by
+    flag rather than deletion, <strong>correct forward</strong> with remediation patches
+    through the same gate, and <strong>reprocess</strong> affected documents against
+    fixed code — re-extraction diffs naturally against current canonical. Never hand-edit
+    the store: an unledgered mutation is the one thing the invariant cannot forgive.
+  </p>
+</section>
+
+<!-- ══════════════════════ 09 OBSERVABILITY ══════════════════════ -->
+<section class="page" id="observability">
+  <div class="kicker">09 · Observability</div>
+  <h2>One trace per command, one call path for every LLM decision</h2>
+  <p>
+    All four LLM roles go through a single instrumented entry point, so Langfuse receives
+    every prompt, parsed output, and token count the system produces. Pipeline runs open
+    a named root span; LangGraph node spans and the generations made inside them nest
+    beneath it.
+  </p>
+  <pre><code>kgi-ingest banking_crisis_2023.md            ⟵ root span (outcome recorded)
+ └─ LangGraph
+     ├─ parse · decompose                     ⟵ node spans
+     ├─ extract
+     │   └─ extract-unit ×4                   ⟵ generations (tokens, cost)
+     ├─ resolve
+     │   ├─ resolution-judge ×N               ⟵ "same entity?" verdicts
+     │   └─ conflict-adjudicator ×N           ⟵ supersession reasoning
+     └─ score_route · stage
+
+kgi-review patch_…  (same session id)         ⟵ the approval, days later
+kgi-ask "…"                                   ⟵ retrieval + grounded-answer</code></pre>
+  <ul class="tight">
+    <li><strong>Session = document journey.</strong> The run's thread id becomes the
+      Langfuse session, so an ingest and its later review resume group together.</li>
+    <li><strong>Judge decisions are inspectable.</strong> The exact adjudicator prompt
+      that produced a supersession op in the review queue is one click away.</li>
+    <li><strong>Cost is attributable</strong> per document, per stage, per role —
+      extraction dominates, judges are the rare expensive tail, as designed.</li>
+    <li><strong>Fail-open by construction.</strong> Tracing activates only when keys are
+      present and every helper no-ops on error; observability can never block ingestion.</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════ 10 STATUS ══════════════════════ -->
+<section class="page" id="status">
+  <div class="kicker">10 · Status &amp; roadmap</div>
+  <h2>What is verified, what is deliberately deferred</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>Capability</th><th>Note</th></tr>
+    <tr><td><span class="pill built">verified</span></td><td>End-to-end pipeline with durable HITL gate</td><td>Invariant held in every live run: canonical untouched until approval</td></tr>
+    <tr><td><span class="pill built">verified</span></td><td>Resolution cascade, calibrated thresholds</td><td>True aliases auto-merge; lookalike siblings escalated and kept distinct</td></tr>
+    <tr><td><span class="pill built">verified</span></td><td>Conflict engine, both collision directions</td><td>Real CEO successions supersede bi-temporally; flat contradictions force review</td></tr>
+    <tr><td><span class="pill built">verified</span></td><td>Idempotent, rebase-checked commit engine</td><td>Crash-and-retry converges; stale diffs re-queue; provenance transactional</td></tr>
+    <tr><td><span class="pill built">verified</span></td><td>Grounded retrieval with time travel</td><td>Cited answers; honest refusals; as-of reconstruction</td></tr>
+    <tr><td><span class="pill built">verified</span></td><td>Review client (browser + terminal), full tracing</td><td>Approvals resume parked runs; every LLM decision observable</td></tr>
+    <tr><td><span class="pill deferred">deferred</span></td><td>Evaluation harness (L15)</td><td>Highest-value next build: faithfulness vs source spans, supersession regression suite, review-economics metrics</td></tr>
+    <tr><td><span class="pill deferred">deferred</span></td><td>Atomic-fact decomposition</td><td>Swap-in behind the existing seam when pronoun-heavy prose degrades extraction</td></tr>
+    <tr><td><span class="pill deferred">deferred</span></td><td>Schema governance lifecycle</td><td>Trigger-based: build when type count, near-duplicates, or reviewer count demand it</td></tr>
+    <tr><td><span class="pill deferred">deferred</span></td><td>Global search &amp; reranking</td><td>Community summaries and cross-encoders earn their cost on much larger graphs</td></tr>
+    <tr><td><span class="pill deferred">deferred</span></td><td>Remediation tooling</td><td><code>reingest --force</code>, quarantine flags, ledger-driven corrective patches</td></tr>
+    <tr><td><span class="pill deferred">deferred</span></td><td>Test isolation</td><td>Integration tests currently own (and wipe) the dev database</td></tr>
+  </table></div>
+  <p style="font-size:13.5px;margin-top:18px">
+    Companion documents in the repository: <code>kg_ingestion_architecture.md</code>
+    (full design-space analysis) and <code>docs/lifecycle.md</code> (sequence and state
+    diagrams).
+  </p>
+</section>
+
+</main>
+</body>
+</html>
