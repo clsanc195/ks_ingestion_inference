@@ -56,9 +56,15 @@ def ingest(path: Path, thread_id: str = typer.Option(None, help="Resume-able run
             "callbacks": observability.langgraph_callbacks(),
             "metadata": {"langfuse_session_id": thread, "source": str(path)},
         }
-        result = pipeline.invoke(
-            {"source_path": str(path), "modality": modality}, config
-        )
+        # One root span per command: the LangGraph node spans AND the LLM
+        # generations inside the nodes all nest under it -> one trace per ingest.
+        with observability.span(f"kgi-ingest {path.name}", {"path": str(path)}) as sp:
+            result = pipeline.invoke(
+                {"source_path": str(path), "modality": modality}, config
+            )
+            if sp is not None:
+                sp.update(output={"parked": "__interrupt__" in result,
+                                  "report": result.get("commit_report")})
     if "__interrupt__" in result:
         payload = result["__interrupt__"][0].value
         console.print(
@@ -169,7 +175,11 @@ def review(
             "callbacks": observability.langgraph_callbacks(),
             "metadata": {"langfuse_session_id": thread, "patch_id": patch_id},
         }
-        result = pipeline.invoke(Command(resume=decisions), config)
+        with observability.span(f"kgi-review {patch_id}",
+                                {"decisions": len(decisions)}) as sp:
+            result = pipeline.invoke(Command(resume=decisions), config)
+            if sp is not None:
+                sp.update(output=result.get("commit_report"))
     _print_report(result)
 
 

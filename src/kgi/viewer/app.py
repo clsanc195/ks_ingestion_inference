@@ -167,7 +167,12 @@ def create_app() -> FastAPI:
                 "callbacks": observability.langgraph_callbacks(),
                 "metadata": {"langfuse_session_id": thread, "patch_id": patch_id},
             }
-            result = pipeline.invoke(Command(resume=decisions), config)
+            with observability.span(f"kgi-review {patch_id}",
+                                    {"decisions": len(decisions),
+                                     "reviewer": req.reviewer}) as sp:
+                result = pipeline.invoke(Command(resume=decisions), config)
+                if sp is not None:
+                    sp.update(output=result.get("commit_report"))
         return result.get("commit_report", {})
 
     @app.get("/api/stats")
