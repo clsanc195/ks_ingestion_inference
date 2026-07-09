@@ -107,16 +107,31 @@ class CanonicalGraph(_Base):
             return [dict(rec["r"]) for rec in result]
 
     def edges_from(self, subject_id: str, predicate: str) -> list[dict]:
-        """Current edges (subject)-[predicate]->(*), with object ids — used to detect
-        contradictions where the new fact disagrees on the object (L6)."""
+        """Current edges (subject)-[predicate]->(*), with object ids — subject-side
+        contradiction detection (L6): same subject, different object."""
         with self.session() as s:
             result = s.run(
                 "MATCH (a:Canonical {id: $subj})-[r:REL {predicate: $pred}]->(b:Canonical) "
                 "WHERE r.valid_to IS NULL "
-                "RETURN r, b.id AS object_id",
+                "RETURN r, b.id AS object_id, b.name AS object_name",
                 subj=subject_id, pred=predicate,
             )
-            return [{**dict(rec["r"]), "object_id": rec["object_id"]} for rec in result]
+            return [{**dict(rec["r"]), "object_id": rec["object_id"],
+                     "object_name": rec["object_name"]} for rec in result]
+
+    def edges_to(self, object_id: str, predicate: str) -> list[dict]:
+        """Current edges (*)-[predicate]->(object), with subject ids — object-side
+        contradiction detection (L6): same object, different subject. This is the
+        succession case: (Körner)-[ceo_of]->(CS) vs existing (Gottstein)-[ceo_of]->(CS)."""
+        with self.session() as s:
+            result = s.run(
+                "MATCH (a:Canonical)-[r:REL {predicate: $pred}]->(b:Canonical {id: $obj}) "
+                "WHERE r.valid_to IS NULL "
+                "RETURN r, a.id AS subject_id, a.name AS subject_name",
+                obj=object_id, pred=predicate,
+            )
+            return [{**dict(rec["r"]), "subject_id": rec["subject_id"],
+                     "subject_name": rec["subject_name"]} for rec in result]
 
     def known_predicates(self) -> list[str]:
         """Distinct predicates in canonical — extraction guidance (L2) so new documents

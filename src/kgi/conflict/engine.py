@@ -59,15 +59,20 @@ class _ConflictJudgment(BaseModel):
 
 
 _ADJUDICATOR_SYSTEM = """You adjudicate potential contradictions in a knowledge graph.
-An existing fact and a new fact share the same subject and predicate but assert
-different objects. Classify the pair:
+An existing fact and a new fact share the same predicate and one endpoint, but differ
+on the other endpoint. Classify the pair:
 
-- compatible: both can be true at the same time (multi-valued predicate — a company
-  produces many products, a person founded several companies).
+- compatible: both can be true at the same time (multi-valued — a company has many
+  divisions; a company can be founded by several co-founders; a person can serve on
+  several boards).
 - temporal_supersession: the new fact replaces the old one over time — the evidence
-  clearly indicates a change (a move, a role change, an acquisition, explicit dates).
+  clearly indicates a change (a move, a successor taking a role, an acquisition,
+  explicit dates or words like "replaced" / "until").
 - semantic_conflict: the claims cannot both be true and there is no clear evidence
   of change over time.
+
+Roles like CEO or chairman of one organization are typically held by one person at a
+time — a new holder with evidence of succession is temporal_supersession.
 
 Be conservative: if the evidence does not clearly indicate change over time, answer
 semantic_conflict rather than temporal_supersession. A wrong supersession silently
@@ -75,11 +80,9 @@ rewrites history; an escalation only costs one human review."""
 
 
 def _adjudicate(
-    subject_name: str,
-    predicate: str,
-    old_object_name: str,
+    old_fact: str,
     old_edge: dict,
-    new_object_name: str,
+    new_fact: str,
     relation: CandidateRelation,
 ) -> _ConflictJudgment:
     import anthropic
@@ -100,11 +103,10 @@ def _adjudicate(
             {
                 "role": "user",
                 "content": (
-                    f"EXISTING fact: ({subject_name}) -[{predicate}]-> ({old_object_name})"
+                    f"EXISTING fact: {old_fact}"
                     f"  valid_from={old_edge.get('valid_from')!r}"
                     f"  supported by {old_edge.get('support', 1)} source(s)\n"
-                    f"NEW fact: ({subject_name}) -[{predicate}]-> ({new_object_name})"
-                    f"  valid_from={relation.valid_from!r}\n"
+                    f"NEW fact: {new_fact}  valid_from={relation.valid_from!r}\n"
                     f"NEW fact evidence: {evidence!r}"
                 ),
             },
@@ -119,19 +121,26 @@ def _op_id() -> str:
 def correlate_relation(
     graph: CanonicalGraph,
     relation: CandidateRelation,
-    subject_id: str,
+    subject_ref: NodeRef,
+    subject_name: str,
     object_ref: NodeRef,
     object_name: str,
     depends_on: list[str] | None = None,
 ) -> tuple[Correlation, list[CorrelatedOp]]:
-    """Compare a staged relation against canonical edges of the resolved subject and
+    """Compare a staged relation against canonical edges sharing either endpoint and
     emit the patch ops for the correlation outcome (§3.2 table).
 
-    Runs whenever the SUBJECT is canonical — the object may be brand-new this patch
-    (the typical contradiction: a move points at a city the graph has never seen).
+    Runs whenever EITHER endpoint is canonical. Subject-side conflicts: same subject,
+    same predicate, different object (a company moved HQ). Object-side conflicts:
+    same object, same predicate, different subject — the succession shape:
+    (Körner)-[ceo_of]->(CS) arriving while (Gottstein)-[ceo_of]->(CS) is current,
+    where the new subject may be a node this patch is only just creating.
     """
-    if object_ref.canonical_id:
-        exact = graph.edges_between(subject_id, object_ref.canonical_id, relation.predicate)
+    both_canonical = subject_ref.canonical_id and object_ref.canonical_id
+    if both_canonical:
+        exact = graph.edges_between(
+            subject_ref.canonical_id, object_ref.canonical_id, relation.predicate
+        )
         if exact:
             return Correlation.reinforces, [
                 CorrelatedOp(
@@ -147,13 +156,12 @@ def correlate_relation(
                 )
             ]
 
-    subject_name = (graph.get_node(subject_id) or {}).get("name", subject_id)
     preconditions = []
-    if object_ref.canonical_id:
+    if both_canonical:
         preconditions.append(
             Precondition(
                 kind="edge_absent",
-                subject=subject_id,
+                subject=subject_ref.canonical_id,
                 expected={"predicate": relation.predicate,
                           "object_id": object_ref.canonical_id},
             )
@@ -161,7 +169,7 @@ def correlate_relation(
     assert_op = AssertEdge(
         op_id=_op_id(),
         depends_on=depends_on or [],
-        subject=NodeRef(canonical_id=subject_id),
+        subject=subject_ref,
         predicate=relation.predicate,
         object=object_ref,
         properties=relation.properties,
@@ -169,21 +177,30 @@ def correlate_relation(
         preconditions=preconditions,
         rationale=f"asserts {relation.predicate}",
     )
+    new_fact = f"({subject_name}) -[{relation.predicate}]-> ({object_name})"
 
-    others = [
-        e for e in graph.edges_from(subject_id, relation.predicate)
-        if e["object_id"] != object_ref.canonical_id
-    ]
-    if not others:
+    # Existing current edges that share one endpoint + predicate but differ on the
+    # other endpoint: each is a potential contradiction to adjudicate.
+    colliding: list[tuple[str, dict]] = []  # (old fact rendering, edge dict)
+    if subject_ref.canonical_id:
+        colliding += [
+            (f"({subject_name}) -[{relation.predicate}]-> ({e['object_name']})", e)
+            for e in graph.edges_from(subject_ref.canonical_id, relation.predicate)
+            if e["object_id"] != object_ref.canonical_id
+        ]
+    if object_ref.canonical_id:
+        colliding += [
+            (f"({e['subject_name']}) -[{relation.predicate}]-> ({object_name})", e)
+            for e in graph.edges_to(object_ref.canonical_id, relation.predicate)
+            if e["subject_id"] != subject_ref.canonical_id
+        ]
+    if not colliding:
         return Correlation.new, [CorrelatedOp(assert_op, resolution=0.5)]
 
     outcome = Correlation.extends
     ops: list[CorrelatedOp] = [CorrelatedOp(assert_op, resolution=0.5)]
-    for old in others:
-        old_object_name = (graph.get_node(old["object_id"]) or {}).get("name", "?")
-        judgment = _adjudicate(
-            subject_name, relation.predicate, old_object_name, old, object_name, relation
-        )
+    for old_fact, old in colliding:
+        judgment = _adjudicate(old_fact, old, new_fact, relation)
         if judgment.verdict == "temporal_supersession":
             outcome = (Correlation.contradicts_temporal
                        if outcome != Correlation.contradicts_semantic else outcome)
@@ -196,8 +213,7 @@ def correlate_relation(
                         reason="superseded",
                         preconditions=[Precondition(kind="edge_exists", subject=old["id"])],
                         rationale=(
-                            f"superseded: ({subject_name}) -[{relation.predicate}]-> "
-                            f"({old_object_name}) replaced by ({object_name}). "
+                            f"superseded: {old_fact} replaced by {new_fact}. "
                             f"{judgment.reasoning}"
                         ),
                     ),
@@ -207,10 +223,7 @@ def correlate_relation(
         elif judgment.verdict == "semantic_conflict":
             outcome = Correlation.contradicts_semantic
             ops[0].semantic = True  # the new assertion itself needs human eyes
-            ops[0].op.rationale = (
-                f"CONFLICTS with ({subject_name}) -[{relation.predicate}]-> "
-                f"({old_object_name}): {judgment.reasoning}"
-            )
+            ops[0].op.rationale = f"CONFLICTS with {old_fact}: {judgment.reasoning}"
             ops.append(
                 CorrelatedOp(
                     InvalidateEdge(
@@ -220,7 +233,7 @@ def correlate_relation(
                         reason="contradicted",
                         preconditions=[Precondition(kind="edge_exists", subject=old["id"])],
                         rationale=(
-                            f"contested by new claim ({object_name}); accept to retire "
+                            f"contested by new claim {new_fact}; accept to retire "
                             f"the old fact, reject to keep both as contested"
                         ),
                     ),

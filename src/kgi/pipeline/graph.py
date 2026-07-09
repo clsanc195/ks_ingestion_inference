@@ -259,20 +259,26 @@ def resolve_node(state: IngestState) -> dict:
                 )
 
         names_by_temp = {e.temp_id: e.name for e in entities}
+
+        def _ref_name(ref: NodeRef, temp_id: str) -> str:
+            if ref.temp_id:
+                return names_by_temp.get(temp_id, "?")
+            return (graph.get_node(ref.canonical_id) or {}).get("name", "?")
+
         for rel in relations:
             subj, obj = refs[rel.subject_temp_id], refs[rel.object_temp_id]
-            if subj.canonical_id:
-                # Canonical subject: full correlation, including contradiction
-                # detection against its existing edges (L6). The object may be new
-                # this patch — that's the typical contradiction shape.
-                object_name = (
-                    names_by_temp.get(rel.object_temp_id, "?")
-                    if obj.temp_id
-                    else (graph.get_node(obj.canonical_id) or {}).get("name", "?")
-                )
-                depends = [dep_of[rel.object_temp_id]] if obj.temp_id else []
+            depends = [dep_of[t] for t in (rel.subject_temp_id, rel.object_temp_id)
+                       if t in dep_of]
+            if subj.canonical_id or obj.canonical_id:
+                # At least one endpoint exists in canonical: full correlation,
+                # including contradiction detection on whichever side is shared —
+                # subject-side (a company moved HQ) or object-side (a role changed
+                # hands: new CEO node pointing at an existing company).
                 _outcome, correlated = correlate_relation(
-                    graph, rel, subj.canonical_id, obj, object_name, depends
+                    graph, rel,
+                    subj, _ref_name(subj, rel.subject_temp_id),
+                    obj, _ref_name(obj, rel.object_temp_id),
+                    depends,
                 )
                 for item in correlated:
                     _add(
@@ -283,10 +289,8 @@ def resolve_node(state: IngestState) -> dict:
                         semantic=item.semantic,
                     )
                 continue
-            # New subject: it can't have existing edges, so nothing to contradict —
+            # Both endpoints are new this patch: nothing in canonical to contradict —
             # plain assertion, dependent on its CreateNode ops.
-            depends = [dep_of[t] for t in (rel.subject_temp_id, rel.object_temp_id)
-                       if t in dep_of]
             _add(
                 AssertEdge(
                     op_id=f"op_{uuid.uuid4().hex[:12]}",
