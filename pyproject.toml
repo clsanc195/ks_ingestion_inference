@@ -18,7 +18,7 @@ dependencies = [
     "typer>=0.12",
     "fastapi>=0.111",
     "uvicorn>=0.30",
-    "langfuse>=3",
+    "langfuse>=3,<4",  # v4 changed the observation API; pinned to the v3 API we use
     "rich>=13",
     "lxml>=5.2",
 ]
