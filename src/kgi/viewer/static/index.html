@@ -41,18 +41,29 @@
     height: 100vh; display: flex; flex-direction: column; overflow: hidden;
   }
   header {
-    display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px;
     border-bottom: 1px solid var(--grid); background: var(--surface-1);
     flex-wrap: wrap;
   }
-  header h1 { font-size: 15px; font-weight: 600; margin-right: 4px; }
-  .tiles { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tile {
-    padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px;
-    background: var(--surface-1); text-align: center; min-width: 74px;
+  header h1 { font-size: 15px; font-weight: 600; }
+  .searchbar { display: flex; gap: 6px; align-items: center; }
+  .searchbar input[type=text] {
+    font: inherit; font-size: 13px; width: 300px; padding: 5px 10px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--page); color: var(--ink-1);
   }
-  .tile b { display: block; font-size: 17px; }
-  .tile span { font-size: 11px; color: var(--ink-2); }
+  .searchbar input[type=date] {
+    font: inherit; font-size: 12px; padding: 4px 6px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--page); color: var(--ink-2);
+  }
+  .tiles { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tile {
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-1); text-align: center; min-width: 66px;
+  }
+  .tile b { display: block; font-size: 16px; }
+  .tile span { font-size: 10.5px; color: var(--ink-2); }
   .spacer { flex: 1; }
   button.chip {
     font: inherit; font-size: 12.5px; padding: 5px 12px; cursor: pointer;
@@ -60,6 +71,7 @@
     background: var(--surface-1); color: var(--ink-1);
   }
   button.chip[aria-pressed="true"] { border-color: var(--s1); color: var(--s1); }
+  button.chip.primary { border-color: var(--s1); color: var(--s1); }
   main { flex: 1; display: flex; min-height: 0; }
   #canvas-wrap { flex: 1; position: relative; min-width: 0; }
   svg { width: 100%; height: 100%; display: block; background: var(--surface-1); cursor: grab; }
@@ -80,7 +92,7 @@
   }
   #tooltip .sub { color: var(--ink-2); font-size: 11.5px; }
   aside {
-    width: 360px; border-left: 1px solid var(--grid); background: var(--surface-1);
+    width: 380px; border-left: 1px solid var(--grid); background: var(--surface-1);
     overflow-y: auto; padding: 14px 16px; flex-shrink: 0;
   }
   aside h2 { font-size: 15px; }
@@ -97,23 +109,57 @@
   .kv dt { color: var(--ink-2); }
   .kv dd { word-break: break-word; }
   ul.plain { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  li.edge-row, li.prov-row, li.pending-op { font-size: 12.5px; }
-  li .muted { color: var(--ink-muted); font-size: 11.5px; }
+  li.edge-row, li.prov-row, li.fact-row { font-size: 12.5px; }
+  li .muted, .muted { color: var(--ink-muted); font-size: 11.5px; }
   li.closed { opacity: .62; }
   li.closed .pred::after { content: " (superseded)"; color: var(--critical); font-size: 11px; }
   .decision { font-size: 12px; }
   .decision.accept b { color: var(--good); }
   .decision.reject b { color: var(--critical); }
-  .pending-op { border-left: 3px solid var(--s3); padding-left: 8px; }
+  .answer-box {
+    margin: 10px 0; padding: 10px 12px; border-left: 3px solid var(--s1);
+    background: var(--page); border-radius: 0 8px 8px 0; font-size: 13.5px;
+  }
+  .pending-op {
+    border: 1px solid var(--border); border-left: 3px solid var(--s3);
+    border-radius: 6px; padding: 8px 10px; font-size: 12.5px;
+  }
   .pending-op .conf { color: var(--ink-2); }
+  .pending-op .actions { display: flex; gap: 6px; margin-top: 7px; align-items: center; }
+  .pending-op button {
+    font: inherit; font-size: 11.5px; padding: 3px 10px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-1); color: var(--ink-1);
+  }
+  .pending-op button.sel-accept { border-color: var(--good); color: var(--good); font-weight: 600; }
+  .pending-op button.sel-reject { border-color: var(--critical); color: var(--critical); font-weight: 600; }
+  .pending-op input.note {
+    font: inherit; font-size: 11.5px; flex: 1; padding: 3px 8px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--page); color: var(--ink-1);
+  }
+  .submit-row { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; }
+  .submit-row button {
+    font: inherit; font-size: 12.5px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--s1); border-radius: 999px;
+    background: var(--s1); color: #fff;
+  }
+  .report { font-size: 12.5px; margin-top: 8px; }
   code { font-size: 11px; color: var(--ink-2); word-break: break-all; }
 </style>
 </head>
 <body>
 <header>
-  <h1>kgi · canonical knowledge graph</h1>
-  <div class="tiles" id="tiles"></div>
+  <h1>kgi</h1>
+  <div class="searchbar">
+    <input type="text" id="q" placeholder="search the graph, or ask a question…">
+    <input type="date" id="asof" title="as-of date (time travel)">
+    <button class="chip" id="findBtn">find</button>
+    <button class="chip primary" id="askBtn">ask</button>
+    <button class="chip" id="clearBtn" style="display:none">clear</button>
+  </div>
   <div class="spacer"></div>
+  <div class="tiles" id="tiles"></div>
   <button class="chip" id="queueBtn" aria-pressed="false">review queue</button>
   <button class="chip" id="themeBtn">theme</button>
 </header>
@@ -123,11 +169,7 @@
     <div class="legend" id="legend"></div>
     <div id="tooltip"></div>
   </div>
-  <aside id="panel">
-    <h2>Select a node</h2>
-    <p class="empty">Click any node to see its properties, relationships,
-    bi-temporal history, provenance, and the review decisions that admitted it.</p>
-  </aside>
+  <aside id="panel"></aside>
 </main>
 <script>
 const PALETTE = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
@@ -136,14 +178,17 @@ const el = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let nodes = [], edges = [], typeSlot = new Map(), sim = null, queueMode = false;
+let hlNodes = null, hlEdges = null;  // Sets of ids when a search/ask highlight is active
 
-function slotFor(type) {
-  if (!typeSlot.has(type)) return null;
-  return typeSlot.get(type);
-}
 function colorFor(type) {
-  const slot = slotFor(type);
-  return slot === null || slot >= 8 ? css('--ink-muted') : css(PALETTE[slot]);
+  const slot = typeSlot.get(type);
+  return slot === undefined || slot >= 8 ? css('--ink-muted') : css(PALETTE[slot]);
+}
+function resetPanel() {
+  el('panel').innerHTML = `<h2>Select a node</h2>
+    <p class="empty">Click any node to see its properties, relationships,
+    bi-temporal history, provenance, and the review decisions that admitted it.
+    Or search / ask above.</p>`;
 }
 
 async function load() {
@@ -151,14 +196,14 @@ async function load() {
     fetch('/api/graph').then(r => r.json()),
     fetch('/api/stats').then(r => r.json()),
   ]);
-  // Fixed slot assignment: alphabetical type order, stable across reloads/filters.
   const types = [...new Set(g.nodes.map(n => n.type || '?'))].sort();
   typeSlot = new Map(types.map((t, i) => [t, i]));
   const W = el('svg').clientWidth, H = el('svg').clientHeight;
+  const prev = new Map(nodes.map(n => [n.id, n]));
   nodes = g.nodes.map((n, i) => ({
     ...n,
-    x: W/2 + Math.cos(i * 2.4) * (60 + 14*i),
-    y: H/2 + Math.sin(i * 2.4) * (40 + 10*i),
+    x: prev.get(n.id)?.x ?? W/2 + Math.cos(i * 2.4) * (60 + 14*i),
+    y: prev.get(n.id)?.y ?? H/2 + Math.sin(i * 2.4) * (40 + 10*i),
     vx: 0, vy: 0,
   }));
   const byId = new Map(nodes.map(n => [n.id, n]));
@@ -172,9 +217,9 @@ async function load() {
 
 function renderTiles(s) {
   el('tiles').innerHTML = [
-    [s.nodes, 'entities'], [s.current, 'current facts'],
-    [s.superseded, 'superseded'], [s.docs, 'documents'],
-    [s.decisions, 'decisions'], [s.pending_ops, 'pending review'],
+    [s.nodes, 'entities'], [s.current, 'current'],
+    [s.superseded, 'superseded'], [s.docs, 'docs'],
+    [s.decisions, 'decisions'], [s.pending_ops, 'pending'],
   ].map(([v, l]) => `<div class="tile"><b>${v ?? 0}</b><span>${l}</span></div>`).join('');
 }
 
@@ -187,13 +232,19 @@ function renderLegend(types) {
 function draw() {
   el('edges').innerHTML = edges.map((e, i) => {
     const closed = e.valid_to != null;
+    const hl = hlEdges?.has(e.id);
+    const dim = hlEdges && !hl;
     return `<line data-i="${i}" x1="${e.a.x}" y1="${e.a.y}" x2="${e.b.x}" y2="${e.b.y}"
-      stroke="${css('--baseline')}" stroke-width="2"
-      ${closed ? 'stroke-dasharray="5 4" opacity="0.45"' : ''} />`;
+      stroke="${hl ? css('--s1') : css('--baseline')}" stroke-width="${hl ? 3.5 : 2}"
+      ${closed ? 'stroke-dasharray="5 4"' : ''}
+      opacity="${dim ? 0.12 : closed ? 0.45 : 1}" />`;
   }).join('');
   el('nodes').innerHTML = nodes.map((n, i) => {
     const r = Math.min(9 + n.degree * 1.5, 22);
-    return `<g data-i="${i}" style="cursor:pointer">
+    const hl = hlNodes?.has(n.id);
+    const dim = hlNodes && !hl;
+    return `<g data-i="${i}" style="cursor:pointer" opacity="${dim ? 0.18 : 1}">
+      ${hl ? `<circle cx="${n.x}" cy="${n.y}" r="${r + 5}" fill="none" stroke="${css('--s1')}" stroke-width="2"></circle>` : ''}
       <circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${colorFor(n.type)}"
               stroke="${css('--surface-1')}" stroke-width="2"></circle>
       <text x="${n.x}" y="${n.y + r + 13}" text-anchor="middle"
@@ -202,7 +253,7 @@ function draw() {
   }).join('');
 }
 
-// --- force simulation (repulsion + springs + gravity), cools down and stops ---
+// --- force simulation ---
 function startSim() {
   let alpha = 1;
   const W = el('svg').clientWidth, H = el('svg').clientHeight;
@@ -235,7 +286,7 @@ function startSim() {
 }
 
 // --- pan / zoom / drag ---
-let scale = 1, tx = 0, ty = 0, dragNode = null, panning = null;
+let scale = 1, tx = 0, ty = 0, dragNode = null, panning = null, downAt = null;
 const view = el('view'), svg = el('svg');
 function applyView() { view.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`); }
 function toWorld(ev) {
@@ -250,6 +301,7 @@ svg.addEventListener('wheel', ev => {
   applyView();
 }, {passive: false});
 svg.addEventListener('pointerdown', ev => {
+  downAt = {x: ev.clientX, y: ev.clientY};
   const g = ev.target.closest('g[data-i]');
   if (g) { dragNode = nodes[+g.dataset.i]; startSim(); }
   else panning = {x: ev.clientX - tx, y: ev.clientY - ty};
@@ -261,14 +313,10 @@ svg.addEventListener('pointermove', ev => {
   else hover(ev);
 });
 svg.addEventListener('pointerup', ev => {
-  if (dragNode && !svgMoved(ev)) select(dragNode.id);
+  const moved = downAt && (Math.abs(ev.clientX - downAt.x) + Math.abs(ev.clientY - downAt.y)) > 5;
+  if (dragNode && !moved) select(dragNode.id);
   dragNode = null; panning = null; svg.classList.remove('dragging');
 });
-let downAt = null;
-svg.addEventListener('pointerdown', ev => downAt = {x: ev.clientX, y: ev.clientY});
-function svgMoved(ev) {
-  return downAt && (Math.abs(ev.clientX - downAt.x) + Math.abs(ev.clientY - downAt.y)) > 5;
-}
 
 // --- hover tooltip ---
 const tip = el('tooltip');
@@ -294,7 +342,136 @@ function showTip(ev, html) {
   tip.style.top = (ev.clientY - wrap.top + 12) + 'px';
 }
 
-// --- side panel: node detail (the ingestion story) ---
+// --- highlighting ---
+function highlightEdgeIds(edgeIds, extraNodeIds = []) {
+  hlEdges = new Set(edgeIds);
+  hlNodes = new Set(extraNodeIds);
+  for (const e of edges) if (hlEdges.has(e.id)) { hlNodes.add(e.a.id); hlNodes.add(e.b.id); }
+  el('clearBtn').style.display = '';
+  draw();
+}
+function clearHighlight() {
+  hlNodes = null; hlEdges = null;
+  el('clearBtn').style.display = 'none';
+  draw();
+}
+
+// --- search & ask ---
+async function doFind() {
+  const q = el('q').value.trim();
+  if (!q) return;
+  const asof = el('asof').value;
+  const url = `/api/search?q=${encodeURIComponent(q)}` + (asof ? `&as_of=${asof}` : '');
+  const d = await fetch(url).then(r => r.json());
+  highlightEdgeIds(d.facts.map(f => f.edge_id), d.anchors.map(a => a.canonical_id));
+  el('panel').innerHTML = `<h2>Search</h2>
+    <div class="muted">${esc(q)}${asof ? ' · as of ' + esc(asof) : ''}</div>
+    <h3>Anchors</h3>
+    <ul class="plain">${d.anchors.map(a =>
+      `<li class="fact-row"><b>${esc(a.name)}</b> <span class="muted">${esc(a.entity_type)} · ${(+a.score).toFixed(2)}</span></li>`).join('')
+      || '<li class="empty">no matching entities</li>'}</ul>
+    <h3>Facts (${d.facts.length})</h3>
+    <ul class="plain">${d.facts.map(f =>
+      `<li class="fact-row">${esc(f.text)}<div class="muted">support ${f.support} · ${esc(f.sources.map(s => s.split('/').pop()).join(', ') || 'n/a')}</div></li>`).join('')
+      || '<li class="empty">none</li>'}</ul>`;
+}
+
+async function doAsk() {
+  const q = el('q').value.trim();
+  if (!q) return;
+  const asof = el('asof').value;
+  el('panel').innerHTML = `<h2>Ask</h2><div class="muted">${esc(q)}</div>
+    <p class="empty">thinking…</p>`;
+  const url = `/api/ask?q=${encodeURIComponent(q)}` + (asof ? `&as_of=${asof}` : '');
+  const d = await fetch(url).then(r => r.json());
+  highlightEdgeIds((d.citations || []).map(c => c.edge_id));
+  el('panel').innerHTML = `<h2>Ask</h2>
+    <div class="muted">${esc(q)}${asof ? ' · as of ' + esc(asof) : ''}</div>
+    <div class="answer-box">${esc(d.answer)}</div>
+    ${d.citations?.length ? `<h3>Grounded in</h3>
+    <ul class="plain">${d.citations.map(c =>
+      `<li class="fact-row">${esc(c.fact)}<div class="muted">${esc(c.sources.map(s => s.split('/').pop()).join(', ') || 'n/a')}</div></li>`).join('')}</ul>`
+    : '<p class="empty">No supporting facts — the graph cannot answer this.</p>'}`;
+}
+
+el('findBtn').addEventListener('click', doFind);
+el('askBtn').addEventListener('click', doAsk);
+el('clearBtn').addEventListener('click', () => { clearHighlight(); resetPanel(); });
+el('q').addEventListener('keydown', ev => { if (ev.key === 'Enter') (ev.shiftKey ? doFind() : doAsk()); });
+
+// --- review queue with decisions ---
+const pendingDecisions = {};  // patch_id -> op_id -> {action, note}
+
+async function showQueue() {
+  const d = await fetch('/api/pending').then(r => r.json());
+  el('panel').innerHTML = `<h2>Review queue</h2>` + (d.patches.length ? d.patches.map(p => `
+    <h3>patch <code>${esc(p.patch_id)}</code> · ${esc(p.created_at.slice(0,16).replace('T',' '))}</h3>
+    <ul class="plain">${p.ops.map(o => `
+      <li class="pending-op" data-patch="${esc(p.patch_id)}" data-op="${esc(o.op_id)}">
+        <b>${esc(o.kind)}</b> <span class="conf">conf ${(+o.confidence).toFixed(2)}</span>
+        <div class="muted">${esc(o.rationale)}</div>
+        <div class="actions">
+          <button data-act="accept">accept</button>
+          <button data-act="reject">reject</button>
+          <input class="note" placeholder="note (why)" style="display:none">
+        </div>
+      </li>`).join('')}
+    </ul>
+    <div class="submit-row">
+      <button data-submit="${esc(p.patch_id)}">submit decisions</button>
+      <span class="muted">undecided ops are deferred</span>
+    </div>
+    <div class="report" id="report-${esc(p.patch_id)}"></div>`
+  ).join('') : '<p class="empty">Queue is empty — every proposed fact has been adjudicated.</p>');
+}
+
+el('panel').addEventListener('click', async ev => {
+  const actBtn = ev.target.closest('button[data-act]');
+  if (actBtn) {
+    const row = actBtn.closest('.pending-op');
+    const {patch, op} = row.dataset;
+    const act = actBtn.dataset.act;
+    pendingDecisions[patch] ??= {};
+    pendingDecisions[patch][op] = {action: act, note: ''};
+    row.querySelectorAll('button[data-act]').forEach(b =>
+      b.className = b.dataset.act === act ? `sel-${act}` : '');
+    row.querySelector('input.note').style.display = act === 'reject' ? '' : 'none';
+    return;
+  }
+  const submitBtn = ev.target.closest('button[data-submit]');
+  if (submitBtn) {
+    const patchId = submitBtn.dataset.submit;
+    const decisions = pendingDecisions[patchId] || {};
+    document.querySelectorAll(`.pending-op[data-patch="${patchId}"]`).forEach(row => {
+      const note = row.querySelector('input.note').value;
+      if (decisions[row.dataset.op]) decisions[row.dataset.op].note = note;
+    });
+    if (!Object.keys(decisions).length) return;
+    submitBtn.disabled = true; submitBtn.textContent = 'committing…';
+    const reviewer = localStorage.getItem('kgi-reviewer')
+      || prompt('reviewer name for provenance', 'web') || 'web';
+    localStorage.setItem('kgi-reviewer', reviewer);
+    const report = await fetch(`/api/review/${patchId}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reviewer, decisions}),
+    }).then(r => r.json());
+    el(`report-${patchId}`).innerHTML =
+      `<b style="color:var(--good)">committed ${report.committed?.length ?? 0}</b> · ` +
+      `requeued ${report.requeued?.length ?? 0} · blocked ${report.blocked?.length ?? 0} · ` +
+      `skipped ${report.skipped?.length ?? 0}`;
+    delete pendingDecisions[patchId];
+    await load();            // graph + tiles reflect the commit immediately
+    setTimeout(showQueue, 900);
+  }
+});
+
+el('queueBtn').addEventListener('click', () => {
+  queueMode = !queueMode;
+  el('queueBtn').setAttribute('aria-pressed', String(queueMode));
+  if (queueMode) showQueue(); else resetPanel();
+});
+
+// --- node detail panel ---
 async function select(id) {
   const d = await fetch('/api/node/' + encodeURIComponent(id)).then(r => r.json());
   const n = d.node;
@@ -327,26 +504,7 @@ async function select(id) {
     </ul>`;
 }
 
-// --- review queue drawer ---
-async function showQueue() {
-  const d = await fetch('/api/pending').then(r => r.json());
-  el('panel').innerHTML = `<h2>Review queue</h2>` + (d.patches.length ? d.patches.map(p => `
-    <h3>patch <code>${esc(p.patch_id)}</code> · ${esc(p.created_at.slice(0,16).replace('T',' '))}</h3>
-    <ul class="plain">${p.ops.map(o => `
-      <li class="pending-op"><b>${esc(o.kind)}</b> <span class="conf">conf ${(+o.confidence).toFixed(2)}</span>
-      <div class="muted">${esc(o.rationale)}</div></li>`).join('')}
-    </ul>
-    <p class="muted" style="font-size:12px;margin-top:6px">review in terminal: <code>kgi review ${esc(p.patch_id)}</code></p>`
-  ).join('') : '<p class="empty">Queue is empty — every proposed fact has been adjudicated.</p>');
-}
-el('queueBtn').addEventListener('click', () => {
-  queueMode = !queueMode;
-  el('queueBtn').setAttribute('aria-pressed', String(queueMode));
-  if (queueMode) showQueue();
-  else el('panel').innerHTML = '<h2>Select a node</h2><p class="empty">Click any node for details.</p>';
-});
-
-// --- theme toggle (stamps data-theme; media query is the default) ---
+// --- theme toggle ---
 el('themeBtn').addEventListener('click', () => {
   const root = document.documentElement;
   const dark = root.dataset.theme
@@ -357,7 +515,10 @@ el('themeBtn').addEventListener('click', () => {
   draw();
 });
 
-load();
+resetPanel();
+load().then(() => {
+  if (location.hash === '#queue') el('queueBtn').click();
+});
 </script>
 </body>
 </html>

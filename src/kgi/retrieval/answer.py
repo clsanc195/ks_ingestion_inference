@@ -62,7 +62,7 @@ def answer(question: str, as_of: str | None = None) -> dict:
     )
     by_id = {f.edge_id: f for f in facts}
     citations = [
-        {"fact": by_id[fid].render(), "sources": by_id[fid].sources}
+        {"edge_id": fid, "fact": by_id[fid].render(), "sources": by_id[fid].sources}
         for fid in grounded.fact_ids if fid in by_id
     ]
     return {

@@ -9,11 +9,22 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from kgi.models import OpStatus, RouteTarget
 from kgi.stores.neo4j import CanonicalGraph, StagingStore
 
 _STATIC = Path(__file__).parent / "static"
+
+
+class OpDecision(BaseModel):
+    action: str = Field(pattern="^(accept|reject)$")
+    note: str = ""
+
+
+class ReviewRequest(BaseModel):
+    reviewer: str = "web"
+    decisions: dict[str, OpDecision]  # op_id -> decision; omitted ops are deferred
 
 
 def create_app() -> FastAPI:
@@ -111,6 +122,48 @@ def create_app() -> FastAPI:
                 }
             )
         return {"patches": out}
+
+    @app.get("/api/search")
+    def search(q: str, as_of: str | None = None):
+        """Anchors + neighborhood facts — powers graph highlighting in the UI."""
+        from kgi.retrieval import retrieve
+
+        result = retrieve(q, as_of=as_of)
+        return {
+            "anchors": result["anchors"],
+            "facts": [
+                {"edge_id": f.edge_id, "text": f.render(), "sources": f.sources,
+                 "support": f.support}
+                for f in result["facts"]
+            ],
+        }
+
+    @app.get("/api/ask")
+    def ask(q: str, as_of: str | None = None):
+        """Grounded answer with citations (edge ids let the UI highlight the graph)."""
+        from kgi.retrieval import answer
+
+        return answer(q, as_of=as_of)
+
+    @app.post("/api/review/{patch_id}")
+    def review(patch_id: str, req: ReviewRequest):
+        """Apply reviewer decisions to a parked patch and resume its run — the
+        browser-side face of the HITL gate. Omitted ops are deferred."""
+        from langgraph.types import Command
+
+        from kgi.pipeline import durable_pipeline
+
+        thread = staging.thread_for_patch(patch_id)
+        if thread is None:
+            raise HTTPException(404, f"no parked run for patch {patch_id}")
+        decisions = {
+            op_id: {"action": d.action, "note": d.note, "reviewer_id": req.reviewer}
+            for op_id, d in req.decisions.items()
+        }
+        with durable_pipeline() as pipeline:
+            config = {"configurable": {"thread_id": thread}}
+            result = pipeline.invoke(Command(resume=decisions), config)
+        return result.get("commit_report", {})
 
     @app.get("/api/stats")
     def stats():
