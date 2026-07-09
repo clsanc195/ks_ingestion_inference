@@ -161,5 +161,16 @@ def review(
     _print_report(result)
 
 
+@app.command()
+def serve(port: int = 8100, host: str = "127.0.0.1"):
+    """Serve the graph viewer (canonical graph + provenance + review queue)."""
+    import uvicorn
+
+    from kgi.viewer import create_app
+
+    console.print(f"kgi viewer on [bold]http://{host}:{port}[/bold]")
+    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+
+
 if __name__ == "__main__":
     app()

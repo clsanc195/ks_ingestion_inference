@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kgi · knowledge graph</title>
+<style>
+  :root {
+    --surface-1: #fcfcfb; --page: #f9f9f7;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
+    --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --s1:#2a78d6; --s2:#1baf7a; --s3:#eda100; --s4:#008300;
+    --s5:#4a3aa7; --s6:#e34948; --s7:#e87ba4; --s8:#eb6834;
+    --good:#0ca30c; --critical:#d03b3b;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --surface-1: #1a1a19; --page: #0d0d0d;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#008300;
+    --s5:#9085e9; --s6:#e66767; --s7:#d55181; --s8:#d95926;
+  }}
+  :root[data-theme="light"] {
+    --surface-1: #fcfcfb; --page: #f9f9f7;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
+    --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --s1:#2a78d6; --s2:#1baf7a; --s3:#eda100; --s4:#008300;
+    --s5:#4a3aa7; --s6:#e34948; --s7:#e87ba4; --s8:#eb6834;
+  }
+  :root[data-theme="dark"] {
+    --surface-1: #1a1a19; --page: #0d0d0d;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#008300;
+    --s5:#9085e9; --s6:#e66767; --s7:#d55181; --s8:#d95926;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page); color: var(--ink-1);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    border-bottom: 1px solid var(--grid); background: var(--surface-1);
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin-right: 4px; }
+  .tiles { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tile {
+    padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-1); text-align: center; min-width: 74px;
+  }
+  .tile b { display: block; font-size: 17px; }
+  .tile span { font-size: 11px; color: var(--ink-2); }
+  .spacer { flex: 1; }
+  button.chip {
+    font: inherit; font-size: 12.5px; padding: 5px 12px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-1); color: var(--ink-1);
+  }
+  button.chip[aria-pressed="true"] { border-color: var(--s1); color: var(--s1); }
+  main { flex: 1; display: flex; min-height: 0; }
+  #canvas-wrap { flex: 1; position: relative; min-width: 0; }
+  svg { width: 100%; height: 100%; display: block; background: var(--surface-1); cursor: grab; }
+  svg.dragging { cursor: grabbing; }
+  .legend {
+    position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column;
+    gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-1); font-size: 12px; color: var(--ink-2);
+  }
+  .legend .row { display: flex; align-items: center; gap: 7px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .legend .line { width: 16px; border-top: 2px dashed var(--baseline); }
+  #tooltip {
+    position: absolute; pointer-events: none; display: none; max-width: 320px;
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--ink-1); font-size: 12.5px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.14); z-index: 5;
+  }
+  #tooltip .sub { color: var(--ink-2); font-size: 11.5px; }
+  aside {
+    width: 360px; border-left: 1px solid var(--grid); background: var(--surface-1);
+    overflow-y: auto; padding: 14px 16px; flex-shrink: 0;
+  }
+  aside h2 { font-size: 15px; }
+  aside .type-tag {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    color: var(--ink-2); margin: 2px 0 10px;
+  }
+  aside h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink-muted); margin: 16px 0 6px;
+  }
+  aside .empty { color: var(--ink-muted); font-size: 12.5px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12.5px; }
+  .kv dt { color: var(--ink-2); }
+  .kv dd { word-break: break-word; }
+  ul.plain { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  li.edge-row, li.prov-row, li.pending-op { font-size: 12.5px; }
+  li .muted { color: var(--ink-muted); font-size: 11.5px; }
+  li.closed { opacity: .62; }
+  li.closed .pred::after { content: " (superseded)"; color: var(--critical); font-size: 11px; }
+  .decision { font-size: 12px; }
+  .decision.accept b { color: var(--good); }
+  .decision.reject b { color: var(--critical); }
+  .pending-op { border-left: 3px solid var(--s3); padding-left: 8px; }
+  .pending-op .conf { color: var(--ink-2); }
+  code { font-size: 11px; color: var(--ink-2); word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <h1>kgi · canonical knowledge graph</h1>
+  <div class="tiles" id="tiles"></div>
+  <div class="spacer"></div>
+  <button class="chip" id="queueBtn" aria-pressed="false">review queue</button>
+  <button class="chip" id="themeBtn">theme</button>
+</header>
+<main>
+  <div id="canvas-wrap">
+    <svg id="svg"><g id="view"><g id="edges"></g><g id="nodes"></g></g></svg>
+    <div class="legend" id="legend"></div>
+    <div id="tooltip"></div>
+  </div>
+  <aside id="panel">
+    <h2>Select a node</h2>
+    <p class="empty">Click any node to see its properties, relationships,
+    bi-temporal history, provenance, and the review decisions that admitted it.</p>
+  </aside>
+</main>
+<script>
+const PALETTE = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const el = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let nodes = [], edges = [], typeSlot = new Map(), sim = null, queueMode = false;
+
+function slotFor(type) {
+  if (!typeSlot.has(type)) return null;
+  return typeSlot.get(type);
+}
+function colorFor(type) {
+  const slot = slotFor(type);
+  return slot === null || slot >= 8 ? css('--ink-muted') : css(PALETTE[slot]);
+}
+
+async function load() {
+  const [g, stats] = await Promise.all([
+    fetch('/api/graph').then(r => r.json()),
+    fetch('/api/stats').then(r => r.json()),
+  ]);
+  // Fixed slot assignment: alphabetical type order, stable across reloads/filters.
+  const types = [...new Set(g.nodes.map(n => n.type || '?'))].sort();
+  typeSlot = new Map(types.map((t, i) => [t, i]));
+  const W = el('svg').clientWidth, H = el('svg').clientHeight;
+  nodes = g.nodes.map((n, i) => ({
+    ...n,
+    x: W/2 + Math.cos(i * 2.4) * (60 + 14*i),
+    y: H/2 + Math.sin(i * 2.4) * (40 + 10*i),
+    vx: 0, vy: 0,
+  }));
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  edges = g.edges.map(e => ({...e, a: byId.get(e.source), b: byId.get(e.target)}))
+                 .filter(e => e.a && e.b);
+  renderTiles(stats);
+  renderLegend(types);
+  draw();
+  startSim();
+}
+
+function renderTiles(s) {
+  el('tiles').innerHTML = [
+    [s.nodes, 'entities'], [s.current, 'current facts'],
+    [s.superseded, 'superseded'], [s.docs, 'documents'],
+    [s.decisions, 'decisions'], [s.pending_ops, 'pending review'],
+  ].map(([v, l]) => `<div class="tile"><b>${v ?? 0}</b><span>${l}</span></div>`).join('');
+}
+
+function renderLegend(types) {
+  el('legend').innerHTML =
+    types.map(t => `<div class="row"><span class="dot" style="background:${colorFor(t)}"></span>${esc(t)}</div>`).join('') +
+    `<div class="row"><span class="line"></span>superseded fact</div>`;
+}
+
+function draw() {
+  el('edges').innerHTML = edges.map((e, i) => {
+    const closed = e.valid_to != null;
+    return `<line data-i="${i}" x1="${e.a.x}" y1="${e.a.y}" x2="${e.b.x}" y2="${e.b.y}"
+      stroke="${css('--baseline')}" stroke-width="2"
+      ${closed ? 'stroke-dasharray="5 4" opacity="0.45"' : ''} />`;
+  }).join('');
+  el('nodes').innerHTML = nodes.map((n, i) => {
+    const r = Math.min(9 + n.degree * 1.5, 22);
+    return `<g data-i="${i}" style="cursor:pointer">
+      <circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${colorFor(n.type)}"
+              stroke="${css('--surface-1')}" stroke-width="2"></circle>
+      <text x="${n.x}" y="${n.y + r + 13}" text-anchor="middle"
+            fill="${css('--ink-2')}" font-size="11.5">${esc(n.name)}</text>
+    </g>`;
+  }).join('');
+}
+
+// --- force simulation (repulsion + springs + gravity), cools down and stops ---
+function startSim() {
+  let alpha = 1;
+  const W = el('svg').clientWidth, H = el('svg').clientHeight;
+  function tick() {
+    for (const n of nodes) { n.vx *= 0.85; n.vy *= 0.85; }
+    for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d2 = dx*dx + dy*dy || 1, d = Math.sqrt(d2);
+      const f = Math.min(2600 / d2, 8) * alpha;
+      dx /= d; dy /= d;
+      a.vx -= dx*f; a.vy -= dy*f; b.vx += dx*f; b.vy += dy*f;
+    }
+    for (const e of edges) {
+      let dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const f = (d - 120) * 0.02 * alpha;
+      dx /= d; dy /= d;
+      e.a.vx += dx*f; e.a.vy += dy*f; e.b.vx -= dx*f; e.b.vy -= dy*f;
+    }
+    for (const n of nodes) {
+      n.vx += (W/2 - n.x) * 0.002 * alpha; n.vy += (H/2 - n.y) * 0.002 * alpha;
+      if (n !== dragNode) { n.x += n.vx; n.y += n.vy; }
+    }
+    draw();
+    alpha *= 0.985;
+    if (alpha > 0.02 || dragNode) requestAnimationFrame(tick); else sim = null;
+  }
+  if (!sim) { sim = true; requestAnimationFrame(tick); }
+}
+
+// --- pan / zoom / drag ---
+let scale = 1, tx = 0, ty = 0, dragNode = null, panning = null;
+const view = el('view'), svg = el('svg');
+function applyView() { view.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`); }
+function toWorld(ev) {
+  const r = svg.getBoundingClientRect();
+  return {x: (ev.clientX - r.left - tx) / scale, y: (ev.clientY - r.top - ty) / scale};
+}
+svg.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  const k = ev.deltaY < 0 ? 1.12 : 0.89;
+  const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  tx = mx - (mx - tx) * k; ty = my - (my - ty) * k; scale *= k;
+  applyView();
+}, {passive: false});
+svg.addEventListener('pointerdown', ev => {
+  const g = ev.target.closest('g[data-i]');
+  if (g) { dragNode = nodes[+g.dataset.i]; startSim(); }
+  else panning = {x: ev.clientX - tx, y: ev.clientY - ty};
+  svg.classList.add('dragging'); svg.setPointerCapture(ev.pointerId);
+});
+svg.addEventListener('pointermove', ev => {
+  if (dragNode) { const p = toWorld(ev); dragNode.x = p.x; dragNode.y = p.y; draw(); }
+  else if (panning) { tx = ev.clientX - panning.x; ty = ev.clientY - panning.y; applyView(); }
+  else hover(ev);
+});
+svg.addEventListener('pointerup', ev => {
+  if (dragNode && !svgMoved(ev)) select(dragNode.id);
+  dragNode = null; panning = null; svg.classList.remove('dragging');
+});
+let downAt = null;
+svg.addEventListener('pointerdown', ev => downAt = {x: ev.clientX, y: ev.clientY});
+function svgMoved(ev) {
+  return downAt && (Math.abs(ev.clientX - downAt.x) + Math.abs(ev.clientY - downAt.y)) > 5;
+}
+
+// --- hover tooltip ---
+const tip = el('tooltip');
+function hover(ev) {
+  const g = ev.target.closest('g[data-i]');
+  const line = ev.target.closest('line[data-i]');
+  if (g) {
+    const n = nodes[+g.dataset.i];
+    showTip(ev, `<b>${esc(n.name)}</b><div class="sub">${esc(n.type)} · ${n.degree} relationship${n.degree === 1 ? '' : 's'}</div>`);
+  } else if (line) {
+    const e = edges[+line.dataset.i];
+    const when = e.valid_to ? `closed ${esc(e.valid_to)} (${esc(e.reason)})`
+               : e.valid_from ? `since ${esc(e.valid_from)}` : 'current';
+    showTip(ev, `<b>${esc(e.a.name)} —${esc(e.predicate)}→ ${esc(e.b.name)}</b>
+      <div class="sub">${when} · support ${e.support ?? 1}</div>`);
+  } else tip.style.display = 'none';
+}
+function showTip(ev, html) {
+  const wrap = el('canvas-wrap').getBoundingClientRect();
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  tip.style.left = Math.min(ev.clientX - wrap.left + 14, wrap.width - 330) + 'px';
+  tip.style.top = (ev.clientY - wrap.top + 12) + 'px';
+}
+
+// --- side panel: node detail (the ingestion story) ---
+async function select(id) {
+  const d = await fetch('/api/node/' + encodeURIComponent(id)).then(r => r.json());
+  const n = d.node;
+  const props = Object.entries(n).filter(([k]) => !['id','name','entity_type','confidence'].includes(k));
+  const decByOp = new Map(d.decisions.map(x => [x.op_id, x]));
+  el('panel').innerHTML = `
+    <h2>${esc(n.name)}</h2>
+    <div class="type-tag"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${colorFor(n.entity_type)}"></span>${esc(n.entity_type)} · <code>${esc(n.id)}</code></div>
+    ${props.length ? `<h3>Properties</h3><dl class="kv">${props.map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : ''}
+    ${d.aliases.length ? `<h3>Resolved aliases (SAME_AS)</h3><ul class="plain">${d.aliases.map(a =>
+      `<li class="edge-row">merged via ${esc(a.method)} <span class="muted">(score ${(+a.score).toFixed(2)}, reversible)</span></li>`).join('')}</ul>` : ''}
+    <h3>Relationships</h3>
+    <ul class="plain">${d.edges.map(e => `
+      <li class="edge-row ${e.valid_to ? 'closed' : ''}">
+        <span class="pred">${e.outgoing ? '' : '← '}${esc(e.predicate)}${e.outgoing ? ' →' : ''}</span>
+        <b>${esc(e.other)}</b>
+        <div class="muted">${e.valid_from ? 'from ' + esc(e.valid_from) + ' · ' : ''}${e.valid_to ? 'until ' + esc(e.valid_to) + ' · ' + esc(e.reason) + ' · ' : ''}support ${e.support ?? 1}</div>
+      </li>`).join('') || '<li class="empty">none</li>'}
+    </ul>
+    <h3>Provenance</h3>
+    <ul class="plain">${d.provenance.map(p => {
+      const dec = decByOp.get(p.op_id);
+      return `<li class="prov-row">
+        <div>${esc((p.source || p.doc_id || '?').split('/').pop())}</div>
+        <div class="muted">${esc((p.at || '').slice(0, 16).replace('T', ' '))} · patch <code>${esc(p.patch_id)}</code></div>
+        ${dec ? `<div class="decision ${esc(dec.action)}"><b>${esc(dec.action)}</b> by ${esc(dec.reviewer)}${dec.note ? ` — “${esc(dec.note)}”` : ''}</div>`
+              : '<div class="decision"><b>auto-approved</b> by policy</div>'}
+      </li>`;
+    }).join('') || '<li class="empty">none</li>'}
+    </ul>`;
+}
+
+// --- review queue drawer ---
+async function showQueue() {
+  const d = await fetch('/api/pending').then(r => r.json());
+  el('panel').innerHTML = `<h2>Review queue</h2>` + (d.patches.length ? d.patches.map(p => `
+    <h3>patch <code>${esc(p.patch_id)}</code> · ${esc(p.created_at.slice(0,16).replace('T',' '))}</h3>
+    <ul class="plain">${p.ops.map(o => `
+      <li class="pending-op"><b>${esc(o.kind)}</b> <span class="conf">conf ${(+o.confidence).toFixed(2)}</span>
+      <div class="muted">${esc(o.rationale)}</div></li>`).join('')}
+    </ul>
+    <p class="muted" style="font-size:12px;margin-top:6px">review in terminal: <code>kgi review ${esc(p.patch_id)}</code></p>`
+  ).join('') : '<p class="empty">Queue is empty — every proposed fact has been adjudicated.</p>');
+}
+el('queueBtn').addEventListener('click', () => {
+  queueMode = !queueMode;
+  el('queueBtn').setAttribute('aria-pressed', String(queueMode));
+  if (queueMode) showQueue();
+  else el('panel').innerHTML = '<h2>Select a node</h2><p class="empty">Click any node for details.</p>';
+});
+
+// --- theme toggle (stamps data-theme; media query is the default) ---
+el('themeBtn').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme
+    ? root.dataset.theme === 'dark'
+    : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  renderLegend([...typeSlot.keys()]);
+  draw();
+});
+
+load();
+</script>
+</body>
+</html>

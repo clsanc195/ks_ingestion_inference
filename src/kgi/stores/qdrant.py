@@ -53,7 +53,9 @@ class _Collection:
 
     def _nearest(self, text: str, limit: int) -> list[dict]:
         hits = self._client.query_points(self._name, query=_embed(text), limit=limit).points
-        return [{"score": h.score, **(h.payload or {})} for h in hits]
+        # Cosine of near-identical vectors can float-round past 1.0; scores feed
+        # fields constrained to [0, 1].
+        return [{"score": min(max(h.score, 0.0), 1.0), **(h.payload or {})} for h in hits]
 
     def close(self) -> None:
         self._client.close()

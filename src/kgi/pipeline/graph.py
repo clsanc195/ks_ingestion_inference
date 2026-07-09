@@ -190,6 +190,11 @@ def resolve_node(state: IngestState) -> dict:
             "semantic": semantic,
         }
 
+    # Normalize predicates BEFORE intra-batch dedup, so two units phrasing the same
+    # fact differently ("produces" / "has flagship product") collapse into one op
+    # instead of colliding at commit via their edge_absent preconditions.
+    for rel in state["relations"]:
+        rel.predicate = normalize_predicate(rel.predicate, predicate_vectors)
     entities, relations = _dedupe_batch(state["entities"], state["relations"])
 
     try:
@@ -255,7 +260,6 @@ def resolve_node(state: IngestState) -> dict:
 
         names_by_temp = {e.temp_id: e.name for e in entities}
         for rel in relations:
-            rel.predicate = normalize_predicate(rel.predicate, predicate_vectors)
             subj, obj = refs[rel.subject_temp_id], refs[rel.object_temp_id]
             if subj.canonical_id:
                 # Canonical subject: full correlation, including contradiction
