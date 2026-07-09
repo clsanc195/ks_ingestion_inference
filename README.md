@@ -7,6 +7,9 @@ commits** — the human review gate is the promotion boundary.
 Design doc: [`kg_ingestion_architecture.md`](kg_ingestion_architecture.md) (§7 has the
 resolved pre-build decisions: open-domain, tiered contradiction policy, reversible
 merges, rebase-at-commit, single curator).
+**Lifecycle documentation with diagrams: [`docs/lifecycle.md`](docs/lifecycle.md)** —
+how a document becomes trusted knowledge, the patch state machine, the durable review
+flow, and bi-temporal fact evolution.
 
 ## Layout
 
