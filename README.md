@@ -73,9 +73,18 @@ different process, thanks to the Postgres checkpointer. Every decision is record
 `ReviewDecision` provenance with reviewer identity (the future active-learning labels).
 `--all accept|reject` for batch decisions.
 
+**Retrieval (L13) is live, local-search style**: `kgi search "<query>"` anchors on
+entities by vector similarity and expands their neighborhood; `kgi ask "<question>"`
+answers grounded ONLY in reviewed facts, citing each fact and its source documents.
+`--as-of DATE` time-travels over the bi-temporal edges — "Where is Acme headquartered?"
+answers Zurich today and Basel `--as-of 2024-06-01`, each cited to its sources.
+Questions the graph can't answer get an honest refusal, not a hallucination.
+`kgi serve` runs the graph viewer (force-directed canvas + provenance side panel +
+review queue) at localhost:8100.
+
 Remaining, in suggested order:
 
-1. Graph client/viewer to showcase ingestion + relationships
-2. `schema/manager.py` persistence + type-curation pass (currently in-memory)
-3. Retrieval layer (L13) + eval harness (L15)
+1. Eval harness (L15): faithfulness vs source spans, review-economics metrics
+2. Viewer: search/ask UI + accept/reject from the browser (grow into the L9 client)
+3. Schema governance (deferred until type count or reviewer count demands it)
 ```

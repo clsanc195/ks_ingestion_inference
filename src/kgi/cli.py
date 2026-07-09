@@ -162,6 +162,38 @@ def review(
 
 
 @app.command()
+def search(query: str, as_of: str = typer.Option(None, help="ISO date: facts valid at that time")):
+    """Retrieve graph facts relevant to a query (anchors + neighborhood)."""
+    from kgi.retrieval import retrieve
+
+    result = retrieve(query, as_of=as_of)
+    if not result["anchors"]:
+        console.print("no matching entities in the graph")
+        raise typer.Exit()
+    console.print("anchors: " + ", ".join(
+        f"{a['name']} ({a['score']:.2f})" for a in result["anchors"]))
+    for f in sorted(result["facts"], key=lambda f: f.subject):
+        srcs = ", ".join(s.split("/")[-1] for s in f.sources) or "n/a"
+        console.print(f"  {f.render()}  [dim]support {f.support} · {srcs}[/dim]")
+
+
+@app.command()
+def ask(
+    question: str,
+    as_of: str = typer.Option(None, help="Answer as of this ISO date (time travel)"),
+):
+    """Ask a question; the answer is grounded in reviewed facts and cites them."""
+    from kgi.retrieval import answer as _answer
+
+    result = _answer(question, as_of=as_of)
+    when = f" (as of {as_of})" if as_of else ""
+    console.print(f"[bold]{result['answer']}[/bold]{when}")
+    for c in result.get("citations", []):
+        srcs = ", ".join(s.split("/")[-1] for s in c["sources"]) or "n/a"
+        console.print(f"  • {c['fact']}  [dim]({srcs})[/dim]")
+
+
+@app.command()
 def serve(port: int = 8100, host: str = "127.0.0.1"):
     """Serve the graph viewer (canonical graph + provenance + review queue)."""
     import uvicorn
