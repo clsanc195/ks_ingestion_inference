@@ -268,7 +268,7 @@
   </p>
   <div class="meta-grid">
     <div><b>Status</b><span>Working prototype, verified end-to-end</span></div>
-    <div><b>Test corpus</b><span>Bank profiles + the 2023 Credit Suisse collapse</span></div>
+    <div><b>Inputs</b><span>Markdown · PDF · DOCX · BPMN — pluggable per format</span></div>
     <div><b>Stack</b><span>Python · LangGraph · Neo4j · Qdrant · Claude · Langfuse</span></div>
   </div>
 </section>
@@ -286,10 +286,10 @@
   <ul class="tight">
     <li><strong>Extraction is noisy.</strong> Models hallucinate relations, invert
       directions, and phrase the same fact five different ways across documents.</li>
-    <li><strong>Entities fragment.</strong> "UBS", "UBS Group AG" and "the Swiss bank"
-      become three nodes; worse, <em>GripperOne</em> and <em>GripperTwo</em> — genuinely
-      distinct things with similar names — get merged. Over-merging is the costlier
-      failure: it's nearly invisible after the fact.</li>
+    <li><strong>Entities fragment.</strong> "Acme Corp", "Acme Corporation" and "the
+      company" become three nodes; worse, two similarly-named but distinct things — a
+      product and its successor, a parent and its subsidiary — get merged. Over-merging
+      is the costlier failure: it's nearly invisible after the fact.</li>
     <li><strong>Knowledge changes, stores don't.</strong> A CEO is replaced; an HQ moves.
       Append-only graphs accumulate contradictions; destructive updates erase history.</li>
     <li><strong>No provenance, no trust.</strong> In any serious setting — finance,
@@ -572,65 +572,105 @@
 
 <!-- ══════════════════════ 07 LIFECYCLE ══════════════════════ -->
 <section class="page" id="lifecycle">
-  <div class="kicker">07 · One use case, end to end</div>
-  <h2>The Credit Suisse arc: three documents, one honest graph</h2>
+  <div class="kicker">07 · Lifecycle</div>
+  <h2>The life of one document, drop-off to answer</h2>
   <p>
-    The test corpus exercises every vertical in sequence: profiles of two banks as they
-    stood in 2022, then the 2023 crisis document whose real history contradicts them,
-    then queries only a bi-temporal, provenance-carrying graph can answer.
+    Follow a single document — say, an updated company profile arriving into a graph
+    that already holds an earlier version of the story — through every vertical. Steps
+    01–06 are inference and cost tokens; the amber steps are the gate; everything after
+    it is deterministic bookkeeping.
   </p>
   <ol class="steps">
     <li>
-      <h4>Ingest the 2022 Credit Suisse profile</h4>
-      <p>Hash-registered (duplicate ingest becomes a no-op) → parsed into paragraph
-      units → one extraction call per unit. On an empty graph, resolution is trivial:
-      the patch is all <code>create_node</code> / <code>assert_edge</code> ops —
-      Gottstein as CEO, Lehmann as chairman, the Archegos and Greensill losses, each
-      with an evidence quote.</p>
+      <h4>Register &amp; fingerprint</h4>
+      <p>The file's bytes are hashed; the hash is the document's identity. If an
+      identical document was already committed, the run ends here as an explicit no-op —
+      idempotency starts before any parsing. Structured formats (BPMN) short-circuit
+      differently: they are already typed graphs, so their structure enters as
+      ground-truth candidates that never need an LLM.</p>
+    </li>
+    <li>
+      <h4>Normalize &amp; decompose</h4>
+      <p>The modality parser emits uniform blocks; headings and layout become
+      <em>context</em> attached to each block rather than content. Blocks become
+      extraction units — the bite-sized pieces the extractor reads one at a time, each
+      carrying its lineage (document, block, position) forward.</p>
+    </li>
+    <li>
+      <h4>Extract candidates</h4>
+      <p>One structured LLM call per unit returns candidate entities and relations —
+      each with a verbatim evidence quote and a confidence. The prompt carries the
+      graph's current type and predicate vocabulary, so a repeat concept arrives under
+      the name canonical already uses instead of a fresh paraphrase. Candidates are
+      proposals in memory; nothing has been stored anywhere.</p>
+    </li>
+    <li>
+      <h4>Resolve identities</h4>
+      <p>First within the batch: paragraphs re-mentioning the same name collapse into
+      one candidate, evidence accumulating. Then against canonical, cheapest tier
+      first: exact name → reuse the existing node; embedding similarity above the
+      accept band → a reviewable <code>merge_into</code> with <code>SAME_AS</code>
+      provenance; the ambiguous middle → an LLM judge instructed that a false merge is
+      worse than a duplicate; no match → <code>create_node</code>. Predicates
+      normalize the same way, so "is led by" and "has CEO" don't fork the vocabulary.</p>
+    </li>
+    <li>
+      <h4>Correlate against what the graph believes</h4>
+      <p>Each surviving relation is compared with canonical's current edges. Same fact
+      → a <em>reinforce</em> (support count grows). Novel fact → an <em>assert</em>.
+      A collision — same predicate, one shared endpoint, the other end different (the
+      headquarters moved; the role changed hands) — goes to an adjudicator:
+      <strong>compatible</strong> facts coexist; <strong>temporal supersession</strong>
+      pairs the new assertion with an <code>invalidate_edge</code> closing the old
+      fact's validity window; a <strong>semantic conflict</strong> — incompatible claims
+      with no evidence of change — is marked for mandatory human judgment. Every op
+      records preconditions: a snapshot of the canonical state it was diffed against.</p>
+    </li>
+    <li>
+      <h4>Score &amp; route</h4>
+      <p>Each op earns a blended confidence — extraction certainty, source support,
+      resolution score, schema validation — and policy routes it: auto-approve above
+      the high bar, auto-reject below the floor, human review between. Some ops ignore
+      the score entirely: never-seen types, semantic conflicts, and high-blast-radius
+      merges always face a human.</p>
     </li>
     <li class="gate-step">
-      <h4>Park, review, commit</h4>
-      <p>Every op routes to review (all types are new to an empty graph). The run parks;
-      the curator approves in the browser queue; the commit engine applies ops in
-      dependency order, writes ledger and provenance transactionally, and only then
-      indexes entity names and predicates into Qdrant.</p>
-    </li>
-    <li>
-      <h4>Ingest the UBS profile — cross-document resolution</h4>
-      <p>"Zurich", "Investment Banking", "Asset Management" resolve to existing nodes
-      (rules tier); shared-endpoint collisions like <em>two banks headquartered in
-      Zurich</em> are adjudicated <strong>compatible</strong>. The banks are now
-      connected through shared nodes — exactly what graph-expansion retrieval will
-      exploit.</p>
-    </li>
-    <li>
-      <h4>Ingest the crisis document — the conflict engine's moment</h4>
-      <p>"Körner replaced Gottstein as CEO" arrives as a new person pointing at an
-      existing company: an object-side collision with the current Gottstein edge. The
-      adjudicator rules <strong>temporal supersession</strong> (evidence: "replaced",
-      explicit dates) and the patch pairs the new assertion with
-      <code>invalidate_edge(valid_to: 2022-07)</code>. Same for Hamers→Ermotti at UBS.
-      A flat, dateless contradiction would instead be flagged
-      <strong>semantic conflict</strong> and force-routed to the human.</p>
+      <h4>Stage &amp; park</h4>
+      <p>The full patch is persisted to staging — as a document, deliberately not as
+      graph structure, so nothing downstream can query half-approved knowledge. The run
+      checkpoints and the process exits. Canonical is untouched; the queue shows one
+      pending patch; days may pass.</p>
     </li>
     <li class="gate-step">
-      <h4>The curator adjudicates history</h4>
-      <p>The queue shows each supersession with the adjudicator's reasoning. On
-      approval, old edges close their validity window — nothing is deleted; the viewer
-      now draws them dashed.</p>
+      <h4>Human adjudication</h4>
+      <p>The curator works the queue — terminal or browser — op by op: accept, edit,
+      reject with a note, or defer. Each decision is recorded as provenance with
+      reviewer identity and timestamp; deferred ops simply stay pending. Submitting
+      resumes the parked run exactly where it stopped.</p>
     </li>
     <li>
-      <h4>Query — current, past, and unanswerable</h4>
-      <p><code>kgi ask "Who is the CEO of Credit Suisse?"</code> → Körner, cited to the
-      crisis document. Add <code>--as-of 2021-06-01</code> → Gottstein, cited to the
-      closed edge and its sources. Ask about revenue → an explicit refusal: the answer
-      composer may only cite retrieved facts. Retrieval anchors via entity vectors and
-      expands two hops with per-edge temporal filtering.</p>
+      <h4>Commit, or refuse to</h4>
+      <p>Approved ops apply in dependency order, one transaction each: the ledger is
+      checked (already applied → skip, which is what makes crash-and-retry safe), then
+      preconditions are re-verified against <em>current</em> canonical — if the graph
+      moved since the diff, the op re-queues instead of applying blind. An op whose
+      dependency was rejected blocks. What survives is written together with its
+      provenance; only then are the new entity names and predicates indexed for the
+      next document's resolution, and the document hash marked done.</p>
+    </li>
+    <li>
+      <h4>Serve</h4>
+      <p>The knowledge is now queryable three ways that matter: <em>current</em> —
+      "who leads the company?" answers with the new fact, cited to its source and
+      approval; <em>historical</em> — the same question <code>--as-of</code> an earlier
+      date answers with the superseded fact, because closing a validity window is not
+      deletion; and <em>honestly not at all</em> — a question the reviewed facts can't
+      support gets an explicit refusal, never a guess.</p>
     </li>
   </ol>
   <p style="font-size:13.5px">
-    Same graph, three different truthful answers — because time is part of the data
-    model, and every answer carries its receipts.
+    One document in, three kinds of truthful answers out — and at every step between,
+    a place where a wrong proposal could be caught, priced, or reversed.
   </p>
 </section>
 
@@ -679,7 +719,7 @@
     a named root span; LangGraph node spans and the generations made inside them nest
     beneath it.
   </p>
-  <pre><code>kgi-ingest banking_crisis_2023.md            ⟵ root span (outcome recorded)
+  <pre><code>kgi-ingest &lt;document&gt;                        ⟵ root span (outcome recorded)
  └─ LangGraph
      ├─ parse · decompose                     ⟵ node spans
      ├─ extract
@@ -711,7 +751,7 @@ kgi-ask "…"                                   ⟵ retrieval + grounded-answer<
     <tr><th></th><th>Capability</th><th>Note</th></tr>
     <tr><td><span class="pill built">verified</span></td><td>End-to-end pipeline with durable HITL gate</td><td>Invariant held in every live run: canonical untouched until approval</td></tr>
     <tr><td><span class="pill built">verified</span></td><td>Resolution cascade, calibrated thresholds</td><td>True aliases auto-merge; lookalike siblings escalated and kept distinct</td></tr>
-    <tr><td><span class="pill built">verified</span></td><td>Conflict engine, both collision directions</td><td>Real CEO successions supersede bi-temporally; flat contradictions force review</td></tr>
+    <tr><td><span class="pill built">verified</span></td><td>Conflict engine, both collision directions</td><td>Role successions supersede bi-temporally; flat contradictions force review</td></tr>
     <tr><td><span class="pill built">verified</span></td><td>Idempotent, rebase-checked commit engine</td><td>Crash-and-retry converges; stale diffs re-queue; provenance transactional</td></tr>
     <tr><td><span class="pill built">verified</span></td><td>Grounded retrieval with time travel</td><td>Cited answers; honest refusals; as-of reconstruction</td></tr>
     <tr><td><span class="pill built">verified</span></td><td>Review client (browser + terminal), full tracing</td><td>Approvals resume parked runs; every LLM decision observable</td></tr>
