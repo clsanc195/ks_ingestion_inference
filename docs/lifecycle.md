@@ -214,3 +214,25 @@ flowchart LR
   ANC -. "R name similarity" .-> QDR
   EXP -. "R edges + provenance" .-> NEO
 ```
+
+
+## The compiled LangGraph (source for the deck's FIG 2)
+
+```mermaid
+flowchart TB
+  S((START)) --> parse
+  parse --> D{"is_duplicate ?"}
+  D -- "duplicate → no-op" --> E1((END))
+  D -- "new" --> decompose
+  decompose --> extract
+  extract --> resolve
+  resolve --> score_route
+  score_route --> stage
+  stage --> NR{"needs_review ?"}
+  NR -- "review-routed ops pending" --> review["review — interrupt()"]
+  NR -- "all ops auto-decided" --> commit
+  review -- "Command(resume=decisions)" --> commit
+  commit --> E2((END))
+  PG[("Postgres checkpointer<br/>state saved after every node")]
+  review -. "parked state survives restarts" .-> PG
+```
