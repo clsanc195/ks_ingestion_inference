@@ -147,6 +147,21 @@
   ol.steps li p { font-size: 13.5px; margin: 0; }
   ol.steps li p b { color: var(--ink); font-weight: 650; }
   ol.steps li.gate-step::before { color: var(--gate); border-color: var(--gate); background: var(--gate-dim); }
+  ol.xsteps > li { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 6px 20px; padding-bottom: 20px; }
+  ol.xsteps > li > p { grid-column: 1; }
+  .xs-ex {
+    grid-column: 2; grid-row: 1; align-self: start;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 13px; font: 11.5px/1.7 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-2); overflow-x: auto; white-space: pre; margin: 0;
+  }
+  .xs-ex .ok { color: var(--accent); font-weight: 600; }
+  .xs-ex .warn { color: var(--gate); font-weight: 600; }
+  .xs-ex .dim { color: var(--ink-3); }
+  @media (max-width: 880px) {
+    ol.xsteps > li { grid-template-columns: 1fr; }
+    .xs-ex { grid-column: 1; grid-row: auto; }
+  }
 
   .pill { display: inline-block; font: 650 9.5px/1 ui-monospace, Menlo, monospace; letter-spacing: .09em;
     text-transform: uppercase; border-radius: 5px; padding: 4px 8px; }
@@ -607,34 +622,74 @@
   </div>
   <figcaption>FIG 4 — ingestion flow with store touchpoints (Mermaid; source in docs/lifecycle.md). Amber = the gate; heavy edges = post-approval writes.</figcaption>
   </figure>
-  <ol class="steps">
+  <p style="font-size:13.5px">
+    Running example throughout: a two-sentence profile — <em>"Acme Corp is headquartered
+    in Basel. Elena Vogel has been CEO of Acme Corp since 2020."</em> — arriving into a
+    graph that already knows <em>Acme Corporation</em>, headquartered in <em>Zurich</em>.
+  </p>
+  <ol class="steps xsteps">
     <li><p><b>Register.</b> SHA-256 of the bytes is the document's identity; a hash
       already committed ends the run as a no-op. Structured formats (BPMN) enter as
-      ground-truth candidates without extraction.</p></li>
+      ground-truth candidates without extraction.</p>
+      <div class="xs-ex">sha256(profile.md) → doc_a1b2c3…
+Neo4j :Document{hash}?  → not found → <span class="ok">continue</span>
+<span class="dim">(found → "duplicate — nothing to do", run ends)</span></div></li>
     <li><p><b>Normalize &amp; decompose.</b> Parser emits blocks; headings become
-      per-unit context; each unit keeps lineage (document, block).</p></li>
+      per-unit context; each unit keeps lineage (document, block).</p>
+      <div class="xs-ex">unit 1 · context: heading "Acme profile"
+"Acme Corp is headquartered in Basel. Elena
+ Vogel has been CEO of Acme Corp since 2020."</div></li>
     <li><p><b>Extract.</b> One structured LLM call per unit → candidate entities and
       relations with verbatim evidence quotes and confidence, guided by canonical's
-      current type/predicate vocabulary.</p></li>
+      current type/predicate vocabulary.</p>
+      <div class="xs-ex">E  Acme Corp (Agent .92) · Basel (Place .88)
+   Elena Vogel (Agent .95)
+R  (Acme Corp) —headquartered in→ (Basel)
+   <span class="dim">quote: "Acme Corp is headquartered in Basel"</span>
+R  (Elena Vogel) —is CEO of→ (Acme Corp) · from 2020</div></li>
     <li><p><b>Resolve.</b> Intra-batch dedup, then the cascade per entity: exact name →
       reuse; embedding ≥0.93 → <code>merge_into</code>; 0.70–0.93 → LLM judge; else
-      <code>create_node</code>. Predicates normalize against known phrases (≥0.85).</p></li>
+      <code>create_node</code>. Predicates normalize against known phrases (≥0.85).</p>
+      <div class="xs-ex">"Acme Corp"    exact? no → Qdrant: 0.99 vs
+               "Acme Corporation" → <span class="ok">merge_into</span>
+"Basel"        exact? no → best 0.41 → <span class="ok">create_node</span>
+"Elena Vogel"  exact match → reuse node
+<span class="dim">(0.70–0.93 band → LLM judge decides)</span></div></li>
     <li><p><b>Correlate.</b> Per relation vs current edges: duplicate → reinforce;
       novel → assert; shared-endpoint collision → adjudicate (compatible ·
-      temporal supersession · semantic conflict). Every op snapshots preconditions.</p></li>
+      temporal supersession · semantic conflict). Every op snapshots preconditions.</p>
+      <div class="xs-ex">Neo4j holds (Acme)—headquartered in→(Zurich), current
+new Basel edge shares subject + predicate → adjudicate
+quote has no move, no dates → <span class="warn">semantic_conflict</span>
+CEO edge: no existing collision → plain assert</div></li>
     <li><p><b>Score &amp; route.</b> Blended confidence → auto-approve ≥0.92,
       auto-reject &lt;0.30, else review. New types, semantic conflicts, and high-degree
-      merges force review regardless of score.</p></li>
+      merges force review regardless of score.</p>
+      <div class="xs-ex">op1 merge_into  Acme Corp→…    .82 → review
+op2 create_node Basel          .71 → review
+op3 assert_edge hq→Basel  <span class="warn">⚠</span>     — → review <span class="warn">forced</span>
+op4 assert_edge CEO from 2020  .94 → <span class="ok">auto-approve</span></div></li>
     <li class="gate-step"><p><b>Stage &amp; park.</b> Patch persisted to staging (as a
       document, not graph structure); run checkpoints; process exits. Canonical
-      untouched.</p></li>
+      untouched.</p>
+      <div class="xs-ex">:Patch{id: patch_7f3e21, json, thread_id} → Neo4j staging
+run checkpoint → Postgres · process exits
+<span class="ok">canonical graph: byte-for-byte unchanged</span></div></li>
     <li class="gate-step"><p><b>Review.</b> Curator accepts / edits / rejects-with-note /
       defers per op; each decision recorded with identity and timestamp; submit resumes
-      the run.</p></li>
+      the run.</p>
+      <div class="xs-ex">op1 <span class="ok">✓ accept</span> · op2 <span class="ok">✓ accept</span>
+op3 <span class="warn">✗ reject</span> — note: "Zurich is correct"
+each click → :ReviewDecision{reviewer, action, at}
+submit → parked run resumes from checkpoint</div></li>
     <li><p><b>Commit.</b> Approved ops in dependency order, one transaction each:
       ledger check (idempotent retry), precondition re-verify (stale → requeue),
       dependency blocking, provenance atomic with the fact. Then vectors are indexed
-      and the doc hash marked done.</p></li>
+      and the doc hash marked done.</p>
+      <div class="xs-ex">apply op1, op2, op4 · per op: fact + :AppliedOp ledger
+op3: rejected — <span class="ok">never becomes graph structure</span>
+then Qdrant += "Basel" · :Document{hash} marked done
+re-ingesting profile.md tomorrow → stops at step 01</div></li>
   </ol>
 </section>
 
