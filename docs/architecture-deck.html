@@ -285,8 +285,9 @@
     <div class="nav-label">AROUND THE RUN</div>
     <a href="#query"><span class="idx">06</span>Query path</a>
     <a href="#design"><span class="idx">07</span>Decisions</a>
-    <a href="#status"><span class="idx">08</span>Status</a>
-    <a href="#references"><span class="idx">09</span>References</a>
+    <a href="#scale"><span class="idx">08</span>Scaling up</a>
+    <a href="#status"><span class="idx">09</span>Status</a>
+    <a href="#references"><span class="idx">10</span>References</a>
   </nav>
   <div class="rail-foot">technical architecture<br>working prototype</div>
 </aside>
@@ -1166,9 +1167,80 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
   </p>
 </section>
 
+<section class="page" id="scale">
+  <div class="kicker">08 · Scaling up — good to have</div>
+  <h2>What changes when the numbers grow</h2>
+  <p>
+    Nothing on this page is built. It is the agreed direction for four axes of growth
+    — review volume, ingestion throughput, tenants, and data size — with the trust
+    trade-off of each option stated plainly.
+  </p>
+
+  <h3>Review throughput: from click-per-fact to review-by-exception</h3>
+  <p>
+    A ten-paragraph document produces 30+ ops; per-op clicking doesn't survive real
+    volume. The ladder, in order of adoption — each rung changes the trust model more
+    than the last:
+  </p>
+  <div class="table-wrap"><table>
+    <tr><th>Rung</th><th>What</th><th>Trust trade-off</th></tr>
+    <tr><td>Ergonomics</td><td>Group ops by entity (one card: "Aaron Turner — new entity + 6 facts" → one accept); filtered batch actions ("accept all ≥0.85", "show only conflicts"); keyboard-driven queue (j/k/a/r).</td><td>None — same guarantees, 3-4× fewer decisions. Build first.</td></tr>
+    <tr><td>Reallocate</td><td><strong>Sampling audit:</strong> auto-approve the mid-confidence band, human-review a random 10% of it as quality control; rising sampled error auto-tightens thresholds. <strong>Calibrated thresholds:</strong> use the gold labels in <code>examples/benchmarks/</code> + accumulated review decisions to <em>measure</em> "at ≥0.85 extraction is 97% right", then lower the bar with evidence. <strong>Trust tiers per source:</strong> vetted feeds auto-approve except conflicts and new types.</td><td>Humans review the <em>process</em>, not every item — statistical QC instead of exhaustive inspection.</td></tr>
+    <tr><td>Replace</td><td><strong>Second LLM as reviewer:</strong> a differently-prompted model re-checks each op against its evidence quote; agreement → auto-approve, disagreement → human. <strong>Provisional commit:</strong> facts land immediately but flagged, excluded from high-stakes answers; review happens async, rejection retracts.</td><td>Real weakening: two model opinions can be jointly wrong; provisional facts briefly influence answers. Only with the sampling audit watching, and not for regulated domains.</td></tr>
+  </table></div>
+
+  <h3>Ingestion throughput</h3>
+  <ul class="tight">
+    <li><strong>Parallel extraction.</strong> Step 3 is one LLM call per paragraph,
+      currently sequential — LangGraph's fan-out (<code>Send()</code>) makes a
+      50-paragraph document ~10× faster for the same cost.</li>
+    <li><strong>A work queue in front of the pipeline.</strong> Two simultaneous
+      ingests can both decide "Acme is new" and create twins. Serialize per scope:
+      a Postgres queue (<code>SELECT … FOR UPDATE SKIP LOCKED</code>) at today's
+      scale; Kafka partitioned by tenant when volume, replay, or multiple producers
+      justify the ops cost.</li>
+    <li><strong>The queue can't fix everything:</strong> runs pause at review for
+      days, so strict ordering is impossible by design. The complement is a
+      commit-time check — a name-uniqueness assumption on every
+      <code>create_node</code> op, so the second twin re-queues into dedup instead
+      of being created. Queue for throughput, assumptions for correctness.</li>
+  </ul>
+
+  <h3>Multi-tenant</h3>
+  <ul class="tight">
+    <li><strong>Pooled (one graph, <code>tenant_id</code> on everything)</strong> is
+      feasible because all store access already goes through a few chokepoint
+      classes — but nothing in Neo4j Community enforces the filter; one missed
+      <code>WHERE</code> is a breach. The silent killer: <em>entity dedup across
+      tenants</em> — client A's "Acme" must never merge with client B's. Every
+      lookup, vector search, and vocabulary prompt needs the scope; document hashes
+      become <code>(tenant, hash)</code> pairs.</li>
+    <li><strong>Database-per-tenant</strong> (Neo4j multi-database or separate
+      containers) is the answer for anyone who asks "what <em>enforces</em>
+      isolation?" — connections are already centralized, so the code change is
+      small. Offer pooled as the cheap tier, siloed as the compliance tier.</li>
+  </ul>
+
+  <h3>Data volume</h3>
+  <ul class="tight">
+    <li><strong>Query-side caps:</strong> the viewer returns the whole graph and
+      retrieval walks whole neighborhoods — both need pagination and hub-node
+      limits around ~10⁴ nodes (generic nodes like "Investment Banking" become
+      bridges that pull in half the graph).</li>
+    <li><strong>Corpus-level questions</strong> ("what are the main themes?") need
+      the community-summary layer from GraphRAG<sup><a href="#references">[1]</a></sup>
+      — the one capability that design deliberately left to steal later, over our
+      governed facts instead of raw extraction.</li>
+    <li><strong>Ops maturity travels with size:</strong> backups (Neo4j Community
+      has no hot backup), test isolation (the suite currently wipes the dev
+      database), remediation tooling (forced re-ingest, quarantine flags), and a
+      real eval harness gating prompt/model changes.</li>
+  </ul>
+</section>
+
 <!-- ── 09 STATUS ───────────────────────────────── -->
 <section class="page" id="status">
-  <div class="kicker">08 · Status</div>
+  <div class="kicker">09 · Status</div>
   <h2>Verified vs deferred</h2>
   <div class="table-wrap"><table>
     <tr><th></th><th>Capability</th><th>Note</th></tr>
@@ -1192,7 +1264,7 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
 
 <!-- ── 10 REFERENCES ───────────────────────────── -->
 <section class="page" id="references">
-  <div class="kicker">09 · References</div>
+  <div class="kicker">10 · References</div>
   <h2>Publications and systems informing the design</h2>
   <ol class="refs">
     <li><b>Edge et al., "From Local to Global: A GraphRAG Approach"</b> (2024) —
