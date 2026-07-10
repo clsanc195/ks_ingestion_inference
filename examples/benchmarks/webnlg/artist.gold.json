@@ -1,0 +1,122 @@
+[
+ {
+  "subject": "Aaron Bertram",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Kids Imagine Nation",
+  "webnlg_id": "dev/Artist/4/Id1"
+ },
+ {
+  "subject": "Aaron Bertram",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Suburban Legends",
+  "webnlg_id": "dev/Artist/4/Id1"
+ },
+ {
+  "subject": "Suburban Legends",
+  "predicate": "bandMember",
+  "object": "Brian Robertson (trombonist)",
+  "webnlg_id": "dev/Artist/4/Id1"
+ },
+ {
+  "subject": "Aaron Bertram",
+  "predicate": "genre",
+  "object": "Ska punk",
+  "webnlg_id": "dev/Artist/4/Id1"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Old Man Gloom",
+  "webnlg_id": "dev/Artist/4/Id3"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Lotus Eaters (band)",
+  "webnlg_id": "dev/Artist/4/Id3"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "genre",
+  "object": "Electroacoustic music",
+  "webnlg_id": "dev/Artist/4/Id3"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "activeYearsStartYear",
+  "object": "1995",
+  "webnlg_id": "dev/Artist/4/Id3"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Twilight (band)",
+  "webnlg_id": "dev/Artist/4/Id4"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Lotus Eaters (band)",
+  "webnlg_id": "dev/Artist/4/Id4"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "genre",
+  "object": "Post-metal",
+  "webnlg_id": "dev/Artist/4/Id4"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "activeYearsStartYear",
+  "object": "1995",
+  "webnlg_id": "dev/Artist/4/Id4"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Twilight (band)",
+  "webnlg_id": "dev/Artist/4/Id5"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Old Man Gloom",
+  "webnlg_id": "dev/Artist/4/Id5"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "genre",
+  "object": "Post-metal",
+  "webnlg_id": "dev/Artist/4/Id5"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "activeYearsStartYear",
+  "object": "1995",
+  "webnlg_id": "dev/Artist/4/Id5"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "associatedBand/associatedMusicalArtist",
+  "object": "Twilight (band)",
+  "webnlg_id": "dev/Artist/4/Id6"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "genre",
+  "object": "Black metal",
+  "webnlg_id": "dev/Artist/4/Id6"
+ },
+ {
+  "subject": "Aaron Turner",
+  "predicate": "instrument",
+  "object": "Electric guitar",
+  "webnlg_id": "dev/Artist/4/Id6"
+ },
+ {
+  "subject": "Black metal",
+  "predicate": "musicFusionGenre",
+  "object": "Death metal",
+  "webnlg_id": "dev/Artist/4/Id6"
+ }
+]

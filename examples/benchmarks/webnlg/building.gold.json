@@ -1,0 +1,92 @@
+[
+ {
+  "subject": "11 Diagonal Street",
+  "predicate": "location",
+  "object": "South Africa",
+  "webnlg_id": "dev/Building/3/Id1"
+ },
+ {
+  "subject": "South Africa",
+  "predicate": "capital",
+  "object": "Cape Town",
+  "webnlg_id": "dev/Building/3/Id1"
+ },
+ {
+  "subject": "South Africa",
+  "predicate": "leader",
+  "object": "Cyril Ramaphosa",
+  "webnlg_id": "dev/Building/3/Id1"
+ },
+ {
+  "subject": "11 Diagonal Street",
+  "predicate": "location",
+  "object": "South Africa",
+  "webnlg_id": "dev/Building/3/Id3"
+ },
+ {
+  "subject": "South Africa",
+  "predicate": "leader",
+  "object": "Jacob Zuma",
+  "webnlg_id": "dev/Building/3/Id3"
+ },
+ {
+  "subject": "South Africa",
+  "predicate": "ethnicGroup",
+  "object": "White South African",
+  "webnlg_id": "dev/Building/3/Id3"
+ },
+ {
+  "subject": "200 Public Square",
+  "predicate": "location",
+  "object": "Cleveland",
+  "webnlg_id": "dev/Building/3/Id4"
+ },
+ {
+  "subject": "Cleveland",
+  "predicate": "leader",
+  "object": "Frank G. Jackson",
+  "webnlg_id": "dev/Building/3/Id4"
+ },
+ {
+  "subject": "Cleveland",
+  "predicate": "country",
+  "object": "United States",
+  "webnlg_id": "dev/Building/3/Id4"
+ },
+ {
+  "subject": "300 North LaSalle",
+  "predicate": "location",
+  "object": "Chicago",
+  "webnlg_id": "dev/Building/3/Id6"
+ },
+ {
+  "subject": "Chicago",
+  "predicate": "leader",
+  "object": "Rahm Emanuel",
+  "webnlg_id": "dev/Building/3/Id6"
+ },
+ {
+  "subject": "Chicago",
+  "predicate": "country",
+  "object": "United States",
+  "webnlg_id": "dev/Building/3/Id6"
+ },
+ {
+  "subject": "3Arena",
+  "predicate": "location",
+  "object": "Dublin",
+  "webnlg_id": "dev/Building/3/Id7"
+ },
+ {
+  "subject": "3Arena",
+  "predicate": "architect",
+  "object": "\"HOK SVE\"",
+  "webnlg_id": "dev/Building/3/Id7"
+ },
+ {
+  "subject": "3Arena",
+  "predicate": "completionDate",
+  "object": "\"December 2008\"",
+  "webnlg_id": "dev/Building/3/Id7"
+ }
+]

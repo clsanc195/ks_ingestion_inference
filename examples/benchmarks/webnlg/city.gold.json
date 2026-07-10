@@ -1,0 +1,92 @@
+[
+ {
+  "subject": "Abilene, Texas",
+  "predicate": "elevationAboveTheSeaLevel",
+  "object": "524.0",
+  "webnlg_id": "dev/City/3/Id1"
+ },
+ {
+  "subject": "Abilene, Texas",
+  "predicate": "populationDensity",
+  "object": "429.9 (inhabitants per square kilometre)",
+  "webnlg_id": "dev/City/3/Id1"
+ },
+ {
+  "subject": "Abilene, Texas",
+  "predicate": "areaTotal",
+  "object": "286.5 (square kilometres)",
+  "webnlg_id": "dev/City/3/Id1"
+ },
+ {
+  "subject": "Abilene, Texas",
+  "predicate": "isPartOf",
+  "object": "Texas",
+  "webnlg_id": "dev/City/3/Id2"
+ },
+ {
+  "subject": "United States",
+  "predicate": "capital",
+  "object": "Washington, D.C.",
+  "webnlg_id": "dev/City/3/Id2"
+ },
+ {
+  "subject": "Texas",
+  "predicate": "country",
+  "object": "United States",
+  "webnlg_id": "dev/City/3/Id2"
+ },
+ {
+  "subject": "Albany, Georgia",
+  "predicate": "isPartOf",
+  "object": "Dougherty County, Georgia",
+  "webnlg_id": "dev/City/3/Id3"
+ },
+ {
+  "subject": "Albany, Georgia",
+  "predicate": "country",
+  "object": "United States",
+  "webnlg_id": "dev/City/3/Id3"
+ },
+ {
+  "subject": "United States",
+  "predicate": "ethnicGroup",
+  "object": "African Americans",
+  "webnlg_id": "dev/City/3/Id3"
+ },
+ {
+  "subject": "Albuquerque, New Mexico",
+  "predicate": "leaderTitle",
+  "object": "New Mexico House of Representatives",
+  "webnlg_id": "dev/City/3/Id5"
+ },
+ {
+  "subject": "New Mexico House of Representatives",
+  "predicate": "leader",
+  "object": "Don Tripp",
+  "webnlg_id": "dev/City/3/Id5"
+ },
+ {
+  "subject": "Albuquerque, New Mexico",
+  "predicate": "country",
+  "object": "United States",
+  "webnlg_id": "dev/City/3/Id5"
+ },
+ {
+  "subject": "Albuquerque City Council",
+  "predicate": "leader",
+  "object": "Richard J. Berry",
+  "webnlg_id": "dev/City/3/Id6"
+ },
+ {
+  "subject": "Albuquerque, New Mexico",
+  "predicate": "leaderTitle",
+  "object": "Albuquerque City Council",
+  "webnlg_id": "dev/City/3/Id6"
+ },
+ {
+  "subject": "Albuquerque, New Mexico",
+  "predicate": "country",
+  "object": "United States",
+  "webnlg_id": "dev/City/3/Id6"
+ }
+]

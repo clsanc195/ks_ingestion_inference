@@ -1,0 +1,110 @@
+[
+ {
+  "subject": "Ajoblanco",
+  "predicate": "country",
+  "object": "Spain",
+  "webnlg_id": "dev/Food/3/Id1"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "alternativeName",
+  "object": "\"Ajo blanco\"",
+  "webnlg_id": "dev/Food/3/Id1"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "ingredient",
+  "object": "Bread",
+  "webnlg_id": "dev/Food/3/Id1"
+ },
+ {
+  "subject": "Arem-arem",
+  "predicate": "country",
+  "object": "Indonesia",
+  "webnlg_id": "dev/Food/3/Id3"
+ },
+ {
+  "subject": "Indonesia",
+  "predicate": "leader",
+  "object": "Joko Widodo",
+  "webnlg_id": "dev/Food/3/Id3"
+ },
+ {
+  "subject": "Indonesia",
+  "predicate": "leader",
+  "object": "Jusuf Kalla",
+  "webnlg_id": "dev/Food/3/Id3"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "country",
+  "object": "Spain",
+  "webnlg_id": "dev/Food/4/Id1"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "mainIngredient",
+  "object": "\"Bread, almonds, garlic, water, olive oil\"",
+  "webnlg_id": "dev/Food/4/Id1"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "region",
+  "object": "Andalusia",
+  "webnlg_id": "dev/Food/4/Id1"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "ingredient",
+  "object": "Bread",
+  "webnlg_id": "dev/Food/4/Id1"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "country",
+  "object": "Spain",
+  "webnlg_id": "dev/Food/4/Id2"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "region",
+  "object": "Andalusia",
+  "webnlg_id": "dev/Food/4/Id2"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "alternativeName",
+  "object": "\"Ajo blanco\"",
+  "webnlg_id": "dev/Food/4/Id2"
+ },
+ {
+  "subject": "Ajoblanco",
+  "predicate": "ingredient",
+  "object": "Water",
+  "webnlg_id": "dev/Food/4/Id2"
+ },
+ {
+  "subject": "Arem-arem",
+  "predicate": "dishVariation",
+  "object": "Lemper",
+  "webnlg_id": "dev/Food/4/Id3"
+ },
+ {
+  "subject": "Arem-arem",
+  "predicate": "ingredient",
+  "object": "Banana leaf",
+  "webnlg_id": "dev/Food/4/Id3"
+ },
+ {
+  "subject": "Arem-arem",
+  "predicate": "mainIngredient",
+  "object": "\"compressed rice cooked in banana leaf with vegetables or minced meat fillings\"",
+  "webnlg_id": "dev/Food/4/Id3"
+ },
+ {
+  "subject": "Arem-arem",
+  "predicate": "region",
+  "object": "Javanese cuisine",
+  "webnlg_id": "dev/Food/4/Id3"
+ }
+]
