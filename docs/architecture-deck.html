@@ -828,9 +828,16 @@ gen.update(output=result.model_dump(),           # → Langfuse: prompt,
     For each candidate: <em>"do I already know this thing?"</em> Wrong in one
     direction → duplicates; wrong in the other → two different things glued together,
     which is worse because it's nearly invisible afterwards. So: a
-    <strong>cascade, cheap checks first, expensive judgment only when needed</strong>
-    — after first collapsing re-mentions within the document itself.
+    <strong>cascade of three tiers, cheap checks first, expensive judgment only when
+    needed</strong> — after first collapsing re-mentions within the document itself.
   </p>
+  <div class="table-wrap"><table>
+    <tr><th>Tier</th><th>Check</th><th>Cost</th><th>Settles</th></tr>
+    <tr><td>tier 1</td><td>Exact name match in Neo4j (case-insensitive)</td><td>Free — one indexed lookup</td><td>Identical spellings</td></tr>
+    <tr><td>tier 2</td><td>Embed the name locally, cosine-search Qdrant. Same if ≥&nbsp;0.93, new if &lt;&nbsp;0.70</td><td>Cheap — milliseconds, no API</td><td>Obvious variants and obvious strangers</td></tr>
+    <tr><td>tier 3</td><td>LLM-as-judge, only for scores between 0.70 and 0.93</td><td>Expensive — one Claude call</td><td>The genuinely ambiguous few percent</td></tr>
+  </table></div>
+  <p>Here is how our three candidates move through those tiers:</p>
   <div class="ex"><span class="dim">── "Elena Vogel" ─────────────────────────────────────────────</span>
 tier 1   exact-name lookup in Neo4j      → found (known from an earlier document)
 <span class="ok">result   reuse the existing node — no op needed, zero cost</span>
