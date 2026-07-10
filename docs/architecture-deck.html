@@ -661,11 +661,11 @@ Neo4j :Document{hash}?  → not found → <span class="ok">continue</span>
     <li><p><b>Extract.</b> One structured LLM call per unit → candidate entities and
       relations with verbatim evidence quotes and confidence, guided by canonical's
       current type/predicate vocabulary.</p>
-      <div class="xs-ex">E  Acme Corp (Agent .92) · Basel (Place .88)
-   Elena Vogel (Agent .95)
-R  (Acme Corp) —headquartered in→ (Basel)
-   <span class="dim">quote: "Acme Corp is headquartered in Basel"</span>
-R  (Elena Vogel) —is CEO of→ (Acme Corp) · from 2020</div></li>
+      <div class="xs-ex"><span class="dim">entities:</span>  Acme Corp (Agent .92) · Basel (Place .88)
+           Elena Vogel (Agent .95)
+<span class="dim">relation:</span>  (Acme Corp) —headquartered in→ (Basel)
+           <span class="dim">quote: "Acme Corp is headquartered in Basel"</span>
+<span class="dim">relation:</span>  (Elena Vogel) —is CEO of→ (Acme Corp) · from 2020</div></li>
     <li><p><b>Resolve.</b> Intra-batch dedup, then the cascade per entity: exact name →
       reuse; embedding ≥0.93 → <code>merge_into</code>; 0.70–0.93 → LLM judge; else
       <code>create_node</code>. Predicates normalize against known phrases (≥0.85).</p>
