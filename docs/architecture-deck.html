@@ -485,6 +485,113 @@
       configured model, one traced call path</td>
       <td>Ingestion and ask pause; the graph and queries keep working.</td></tr>
   </table></div>
+  <h3>Who touches which store, when</h3>
+  <figure><div class="fig-wrap">
+  <svg viewBox="0 0 940 620" font-family="ui-monospace, Menlo, monospace" font-size="11.5" role="img" aria-label="Store interactions from ingestion to query: reads and writes per phase for Qdrant, Neo4j, Postgres">
+    <!-- lane headers -->
+    <g text-anchor="middle" font-weight="bold" font-size="12">
+      <rect x="252" y="8" width="176" height="34" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="340" y="25" fill="var(--ink)">QDRANT</text>
+      <text x="340" y="37" fill="var(--ink-3)" font-weight="normal" font-size="10">vector index</text>
+      <rect x="472" y="8" width="196" height="34" rx="8" fill="var(--accent-dim)" stroke="var(--accent)"/>
+      <text x="570" y="25" fill="var(--accent)">NEO4J</text>
+      <text x="570" y="37" fill="var(--accent)" font-weight="normal" font-size="10">system of record</text>
+      <rect x="712" y="8" width="176" height="34" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="800" y="25" fill="var(--ink)">POSTGRES</text>
+      <text x="800" y="37" fill="var(--ink-3)" font-weight="normal" font-size="10">parked runs</text>
+    </g>
+    <!-- lane lines -->
+    <g stroke="var(--line)" stroke-dasharray="3 4">
+      <line x1="340" y1="48" x2="340" y2="586"/>
+      <line x1="570" y1="48" x2="570" y2="586"/>
+      <line x1="800" y1="48" x2="800" y2="586"/>
+    </g>
+
+    <!-- gate band -->
+    <rect x="8" y="278" width="924" height="86" rx="8" fill="var(--gate-dim)"/>
+    <text x="922" y="296" text-anchor="end" fill="var(--gate)" font-weight="bold" font-size="10" letter-spacing="1">HUMAN GATE — RUN PARKED</text>
+
+    <!-- query separator -->
+    <line x1="8" y1="486" x2="932" y2="486" stroke="var(--line-2)"/>
+    <text x="8" y="478" fill="var(--ink-3)" font-size="10" letter-spacing="1">INGESTION ABOVE · QUERY BELOW</text>
+
+    <!-- phase labels -->
+    <g fill="var(--ink-2)">
+      <text x="8" y="76">01 register</text>
+      <text x="8" y="116">02 extract</text>
+      <text x="8" y="156">03 resolve</text>
+      <text x="8" y="196">04 correlate</text>
+      <text x="8" y="236">05 stage</text>
+      <text x="8" y="312" fill="var(--gate)">06 park</text>
+      <text x="8" y="348" fill="var(--gate)">07 review</text>
+      <text x="8" y="398">08 commit</text>
+      <text x="8" y="438">09 index</text>
+      <text x="8" y="524">ask / search</text>
+      <text x="8" y="564">as-of query</text>
+    </g>
+
+    <!-- chips: R = outlined, W = filled accent -->
+    <!-- 01 register: neo4j R doc hash -->
+    <g><rect x="500" y="62" width="140" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="570" y="76" text-anchor="middle" fill="var(--ink-2)">R · doc hash seen?</text></g>
+    <!-- 02 extract: neo4j R vocabulary -->
+    <g><rect x="492" y="102" width="156" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="570" y="116" text-anchor="middle" fill="var(--ink-2)">R · live vocabulary</text></g>
+    <!-- 03 resolve: qdrant R ANN + predicate; neo4j R exact names -->
+    <g><rect x="240" y="142" width="200" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="340" y="156" text-anchor="middle" fill="var(--ink-2)">R · entity ANN · predicates</text></g>
+    <g><rect x="500" y="142" width="140" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="570" y="156" text-anchor="middle" fill="var(--ink-2)">R · exact names</text></g>
+    <!-- 04 correlate: neo4j R current edges -->
+    <g><rect x="484" y="182" width="172" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="570" y="196" text-anchor="middle" fill="var(--ink-2)">R · colliding edges</text></g>
+    <!-- 05 stage: neo4j W patch -->
+    <g><rect x="480" y="222" width="180" height="20" rx="5" fill="var(--accent-dim)" stroke="var(--accent)"/>
+       <text x="570" y="236" text-anchor="middle" fill="var(--accent)" font-weight="bold">W · patch (staging only)</text></g>
+    <!-- 06 park: postgres W checkpoint -->
+    <g><rect x="726" y="298" width="148" height="20" rx="5" fill="var(--accent-dim)" stroke="var(--accent)"/>
+       <text x="800" y="312" text-anchor="middle" fill="var(--accent)" font-weight="bold">W · checkpoint</text></g>
+    <text x="340" y="312" text-anchor="middle" fill="var(--ink-3)" font-size="10">idle — staged facts are never indexed</text>
+    <!-- 07 review: postgres R resume; neo4j W decisions -->
+    <g><rect x="716" y="334" width="168" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="800" y="348" text-anchor="middle" fill="var(--ink-2)">R · resume parked run</text></g>
+    <g><rect x="486" y="334" width="168" height="20" rx="5" fill="var(--accent-dim)" stroke="var(--accent)"/>
+       <text x="570" y="348" text-anchor="middle" fill="var(--accent)" font-weight="bold">W · review decisions</text></g>
+    <!-- 08 commit: neo4j W facts+ledger -->
+    <g><rect x="454" y="384" width="232" height="20" rx="5" fill="var(--accent-dim)" stroke="var(--accent)" stroke-width="1.6"/>
+       <text x="570" y="398" text-anchor="middle" fill="var(--accent)" font-weight="bold">W · facts + ledger + provenance</text></g>
+    <!-- 09 index: qdrant W vectors -->
+    <g><rect x="230" y="424" width="220" height="20" rx="5" fill="var(--accent-dim)" stroke="var(--accent)"/>
+       <text x="340" y="438" text-anchor="middle" fill="var(--accent)" font-weight="bold">W · entity + predicate vectors</text></g>
+    <text x="570" y="438" text-anchor="middle" fill="var(--ink-3)" font-size="10">← only after approval</text>
+
+    <!-- query: qdrant R anchors; neo4j R neighborhood -->
+    <g><rect x="262" y="510" width="156" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="340" y="524" text-anchor="middle" fill="var(--ink-2)">R · anchor entities</text></g>
+    <g><rect x="450" y="510" width="240" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="570" y="524" text-anchor="middle" fill="var(--ink-2)">R · 2-hop expand + provenance</text></g>
+    <text x="800" y="524" text-anchor="middle" fill="var(--ink-3)" font-size="10">not involved</text>
+    <!-- as-of -->
+    <g><rect x="262" y="550" width="156" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="340" y="564" text-anchor="middle" fill="var(--ink-2)">R · anchor entities</text></g>
+    <g><rect x="444" y="550" width="252" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+       <text x="570" y="564" text-anchor="middle" fill="var(--ink-2)">R · edges valid at date (windows)</text></g>
+
+    <!-- legend -->
+    <g font-size="10.5">
+      <rect x="8" y="596" width="34" height="18" rx="5" fill="var(--panel-2)" stroke="var(--line-2)"/>
+      <text x="25" y="609" text-anchor="middle" fill="var(--ink-2)">R</text>
+      <text x="48" y="609" fill="var(--ink-3)">read</text>
+      <rect x="92" y="596" width="34" height="18" rx="5" fill="var(--accent-dim)" stroke="var(--accent)"/>
+      <text x="109" y="609" text-anchor="middle" fill="var(--accent)" font-weight="bold">W</text>
+      <text x="132" y="609" fill="var(--ink-3)">write</text>
+      <text x="196" y="609" fill="var(--ink-3)">every write below the gate band required an approval; the LLM never touches a store directly</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>FIG 2 — store interactions from ingestion (top) to query (bottom): reads dominate before the gate, all writes concentrate after it, and Qdrant is written last — only committed knowledge becomes searchable</figcaption>
+  </figure>
+
   <div class="panel">
     <span class="tag">Not a RAG vector store</span>
     <p>Nothing embeds document chunks. Knowledge lives as explicit, reviewed graph facts;
@@ -550,7 +657,7 @@
     </g>
   </svg>
   </div>
-  <figcaption>FIG 2 — app code is never containerized in dev: CLI and viewer run from the venv and read .env at start; the two compose stacks are independent</figcaption>
+  <figcaption>FIG 3 — app code is never containerized in dev: CLI and viewer run from the venv and read .env at start; the two compose stacks are independent</figcaption>
   </figure>
 
   <h3>Lifecycles that matter operationally</h3>
