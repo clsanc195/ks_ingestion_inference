@@ -831,12 +831,25 @@ gen.update(output=result.model_dump(),           # → Langfuse: prompt,
     <strong>cascade, cheap checks first, expensive judgment only when needed</strong>
     — after first collapsing re-mentions within the document itself.
   </p>
-  <div class="ex">"Elena Vogel"  tier 1 exact name in Neo4j?  YES → reuse node. Done, free.
-"Basel"        tier 1 no → tier 2 embed + search Qdrant → best 0.41 &lt; 0.70
-               → genuinely <span class="ok">NEW → create_node</span>
-"Acme Corp"    tier 1 no → tier 2 → 0.99 vs "Acme Corporation" ≥ 0.93
-               → <span class="ok">SAME → merge_into</span> (with undoable SAME_AS link)
-<span class="dim">0.70–0.93 would go to tier 3, the LLM-as-judge (not needed today)</span></div>
+  <div class="ex"><span class="dim">── "Elena Vogel" ─────────────────────────────────────────────</span>
+tier 1   exact-name lookup in Neo4j      → found (known from an earlier document)
+<span class="ok">result   reuse the existing node — no op needed, zero cost</span>
+
+<span class="dim">── "Basel" ───────────────────────────────────────────────────</span>
+tier 1   exact-name lookup in Neo4j      → not found
+tier 2   embed the name, search Qdrant   → closest existing name scores 0.41
+         0.41 is below the 0.70 floor    → nothing similar exists in the graph
+<span class="ok">result   new entity → create_node op</span>
+
+<span class="dim">── "Acme Corp" ───────────────────────────────────────────────</span>
+tier 1   exact-name lookup in Neo4j      → not found ("Acme Corporation" ≠ exact)
+tier 2   embed the name, search Qdrant   → "Acme Corporation" scores 0.99
+         0.99 is above the 0.93 bar      → confidently the same entity
+<span class="ok">result   merge_into op — keeps an undoable SAME_AS link</span>
+
+<span class="dim">── tier 3 (not triggered by this document) ───────────────────
+a score between 0.70 and 0.93 is too close to call either way;
+the LLM-as-judge decides, instructed to prefer "different"</span></div>
   <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">tier 1 · stores/neo4j.py · find_by_name()</span></div><pre><code>MATCH (n:Canonical)
 WHERE toLower(n.name) = toLower($name)
 RETURN n LIMIT 1</code></pre></div>
