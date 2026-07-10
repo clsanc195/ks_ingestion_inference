@@ -175,44 +175,44 @@ never passes review never influences anything.
 
 ```mermaid
 flowchart LR
-  subgraph ING["INGESTION — one durable run per document"]
+  subgraph ING["INGESTION — one pipeline run per document"]
     direction TB
     DOC([document]) --> REG["register · hash"]
     REG -->|duplicate| NOOP([no-op])
-    REG -->|new| PRS["parse · decompose"]
-    PRS --> EXT["extract  ⟵ LLM"]
-    EXT --> RSV["resolve cascade  ⟵ LLM judge"]
-    RSV --> COR["correlate · conflicts  ⟵ LLM adjudicator"]
+    REG -->|new| PRS["parse · split into paragraphs"]
+    PRS --> EXT["extract facts  ⟵ LLM"]
+    EXT --> RSV["entity dedup  ⟵ LLM-as-judge"]
+    RSV --> COR["conflict detection  ⟵ LLM-as-judge"]
     COR --> SCR["score · route"]
     SCR --> STG["stage patch"]
-    STG --> GATE{{"HUMAN GATE — parked"}}
+    STG --> GATE{{"HUMAN REVIEW — paused"}}
     GATE -->|approved| CMT["commit"]
     GATE -->|rejected| REJ(["logged · not applied"])
     CMT --> IDX["index vectors"]
   end
-  NEO[("Neo4j<br/>system of record")]
-  QDR[("Qdrant<br/>vectors")]
-  PG[("Postgres<br/>checkpoints")]
+  NEO[("Neo4j<br/>main graph + audit trail")]
+  QDR[("Qdrant<br/>name embeddings")]
+  PG[("Postgres<br/>paused runs")]
 
   REG -. "R doc hash" .-> NEO
-  RSV -. "R names / ANN" .-> QDR
-  COR -. "R current edges" .-> NEO
+  RSV -. "R names / similarity" .-> QDR
+  COR -. "R current facts" .-> NEO
   STG -- "W patch (staging)" --> NEO
   GATE -. "checkpoint ⇄ resume" .-> PG
-  CMT == "W facts + ledger + provenance" ==> NEO
-  IDX == "W vectors (post-approval only)" ==> QDR
+  CMT == "W facts + audit records" ==> NEO
+  IDX == "W vectors (approved only)" ==> QDR
 ```
 
 ```mermaid
 flowchart LR
-  Q(["question · optional as-of"]) --> ANC["anchor entities"]
-  ANC --> EXP["expand 2 hops · temporal filter"]
-  EXP --> CMP["compose grounded  ⟵ LLM"]
-  CMP --> ANS(["cited answer / refusal"])
+  Q(["question · optional as-of date"]) --> ANC["find matching entities"]
+  ANC --> EXP["walk graph 2 hops · date filter"]
+  EXP --> CMP["write answer from facts  ⟵ LLM"]
+  CMP --> ANS(["cited answer / 'can't answer'"])
   QDR[("Qdrant")]
   NEO[("Neo4j")]
   ANC -. "R name similarity" .-> QDR
-  EXP -. "R edges + provenance" .-> NEO
+  EXP -. "R facts + sources" .-> NEO
 ```
 
 
