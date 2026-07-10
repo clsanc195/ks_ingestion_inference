@@ -169,3 +169,48 @@ never passes review never influences anything.
 | commit | `kgi/commit/engine.py` | — |
 | retrieve | `kgi/retrieval` | `kgi search` / `kgi ask` |
 | showcase | `kgi/viewer` | `kgi serve` → localhost:8100 |
+
+
+## All flows: ingestion and query (source for the architecture deck figures)
+
+```mermaid
+flowchart LR
+  subgraph ING["INGESTION — one durable run per document"]
+    direction TB
+    DOC([document]) --> REG["register · hash"]
+    REG -->|duplicate| NOOP([no-op])
+    REG -->|new| PRS["parse · decompose"]
+    PRS --> EXT["extract  ⟵ LLM"]
+    EXT --> RSV["resolve cascade  ⟵ LLM judge"]
+    RSV --> COR["correlate · conflicts  ⟵ LLM adjudicator"]
+    COR --> SCR["score · route"]
+    SCR --> STG["stage patch"]
+    STG --> GATE{{"HUMAN GATE — parked"}}
+    GATE -->|approved| CMT["commit"]
+    GATE -->|rejected| REJ(["logged · not applied"])
+    CMT --> IDX["index vectors"]
+  end
+  NEO[("Neo4j<br/>system of record")]
+  QDR[("Qdrant<br/>vectors")]
+  PG[("Postgres<br/>checkpoints")]
+
+  REG -. "R doc hash" .-> NEO
+  RSV -. "R names / ANN" .-> QDR
+  COR -. "R current edges" .-> NEO
+  STG -- "W patch (staging)" --> NEO
+  GATE -. "checkpoint ⇄ resume" .-> PG
+  CMT == "W facts + ledger + provenance" ==> NEO
+  IDX == "W vectors (post-approval only)" ==> QDR
+```
+
+```mermaid
+flowchart LR
+  Q(["question · optional as-of"]) --> ANC["anchor entities"]
+  ANC --> EXP["expand 2 hops · temporal filter"]
+  EXP --> CMP["compose grounded  ⟵ LLM"]
+  CMP --> ANS(["cited answer / refusal"])
+  QDR[("Qdrant")]
+  NEO[("Neo4j")]
+  ANC -. "R name similarity" .-> QDR
+  EXP -. "R edges + provenance" .-> NEO
+```
