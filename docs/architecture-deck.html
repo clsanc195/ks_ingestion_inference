@@ -283,11 +283,12 @@
     <a href="#s8"><span class="idx">s8</span>Review</a>
     <a href="#s9"><span class="idx">s9</span>Commit</a>
     <div class="nav-label">AROUND THE RUN</div>
-    <a href="#query"><span class="idx">06</span>Query path</a>
-    <a href="#design"><span class="idx">07</span>Decisions</a>
-    <a href="#scale"><span class="idx">08</span>Scaling up</a>
-    <a href="#status"><span class="idx">09</span>Status</a>
-    <a href="#references"><span class="idx">10</span>References</a>
+    <a href="#scoring"><span class="idx">06</span>Scoring &amp; gates</a>
+    <a href="#query"><span class="idx">07</span>Query path</a>
+    <a href="#design"><span class="idx">08</span>Decisions</a>
+    <a href="#scale"><span class="idx">09</span>Scaling up</a>
+    <a href="#status"><span class="idx">10</span>Status</a>
+    <a href="#references"><span class="idx">11</span>References</a>
   </nav>
   <div class="rail-foot">technical architecture<br>working prototype</div>
 </aside>
@@ -984,11 +985,13 @@ return review</code></pre></div>
   <div class="ex">op1 merge_into  Acme Corp→Acme Corporation  .82 → review
 op2 create_node Basel                       .71 → review
 op3 assert_edge HQ→Basel  <span class="warn">⚠ contradiction</span>    — → review <span class="warn">(forced)</span>
-op4 assert_edge CEO, from 2020              .94 → <span class="ok">auto-approve ✓</span></div>
+op4 assert_edge CEO, from 2020              .67 → review
+<span class="dim">nothing clears the 0.92 bar on a cold graph — see Scoring &amp; gates</span></div>
   <ul class="tight">
-    <li><strong>Auto-approve ≠ auto-write.</strong> The CEO op cleared 0.92, so no
-      human will look at it — but its approval is a status on a line in a patch. It
-      touches the graph only in step 9, with everything else.</li>
+    <li><strong>Nothing here clears 0.92 — deliberately.</strong> A novel fact on an
+      empty graph carries support 1 and a neutral "new" resolution signal, capping
+      its blend near 0.70. Cold starts are skeptical by design; the full arithmetic,
+      the gates, and the levers have <a href="#scoring">their own section</a>.</li>
     <li><strong>The weights are versioned guesses.</strong> Every reviewer
       accept/reject is stored as a labeled example — exactly the data that will
       calibrate them later.</li>
@@ -1026,12 +1029,12 @@ Postgres           the run's checkpoint (resumable)
 Qdrant             unchanged — staged names are never indexed
 your machine       no kgi process running at all</div>
   <ul class="tight">
-    <li>You see <code>parked at review gate — patch_7f3e21, 3 ops awaiting review</code>
+    <li>You see <code>parked at review gate — patch_7f3e21, 4 ops awaiting review</code>
       and get your shell prompt back.</li>
     <li>This state holds for an hour or a month. Reboot anything — the patch and the
       checkpoint both survive.</li>
-    <li>Even the auto-approved CEO op is just JSON right now: "approved" is a status,
-      not a write.</li>
+    <li>All four ops are just JSON right now — approval, when it happens, is a status
+      change, never a write.</li>
   </ul>
 </section>
 
@@ -1050,7 +1053,7 @@ your machine       no kgi process running at all</div>
 op2 create_node  'Basel' (Place)                                     <span class="ok">✓ accept</span>
 op3 assert_edge  CONFLICTS with (Acme)—headquartered in→(Zurich):
                  flat claim, no relocation evidence        <span class="warn">✗ reject — "Zurich is correct"</span>
-<span class="dim">op4 not shown — auto-approved in step 6, needs nothing from you</span></div>
+op4 assert_edge  (Elena Vogel) —is CEO of→ (Acme) · from 2020       <span class="ok">✓ accept</span></div>
   <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">every click becomes a record · stores/neo4j.py · save_decision()</span></div><pre><code class="lang-cypher">CREATE (d:ReviewDecision {id: $id, patch_id: $patch_id, op_id: $op_id,
         reviewer_id: $reviewer,        // who
         action: $action, note: $note,  // what and why
@@ -1117,9 +1120,114 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
   </ul>
 </section>
 
+<section class="page" id="scoring">
+  <div class="kicker">06 · Scoring &amp; gates</div>
+  <h2>How a fact earns its route</h2>
+  <p>
+    Every op leaves step 6 with one score and one destination. The score is a weighted
+    blend of four signals collected in earlier steps; the destination comes from two
+    thresholds plus overrides that ignore the score entirely. This page is the full
+    arithmetic — every number reproducible from
+    <code>kgi/confidence/scorer.py</code> and <code>kgi/routing/policy.py</code>.
+  </p>
+
+  <h3>The four signals</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Signal</th><th>Weight</th><th>Computed in</th><th>Low end</th><th>High end</th></tr>
+    <tr><td>extraction</td><td>.35</td><td>step 3 — the extractor's own confidence per fact</td><td>hedged, weak quote</td><td>explicit statement, clean quote</td></tr>
+    <tr><td>support</td><td>.25</td><td>steps 2–5 — evidence quotes backing the op (saturates at 3)</td><td>1 quote → ⅓ credit</td><td>3+ independent quotes → full credit</td></tr>
+    <tr><td>resolution</td><td>.25</td><td>step 4 — dedup outcome</td><td><strong>0.5 for "new"</strong> (see calibration note)</td><td>1.0 exact match · 0.99 embedding merge</td></tr>
+    <tr><td>type check</td><td>.15</td><td>step 4 — is the entity type already known?</td><td>0 (new type — also forces review)</td><td>1 (known type)</td></tr>
+  </table></div>
+
+  <h3>The gates, in firing order</h3>
+  <figure><div class="fig-wrap">
+  <svg viewBox="0 0 940 320" font-family="ui-monospace, Menlo, monospace" font-size="11.5" role="img" aria-label="Routing gates and score ruler">
+    <defs><marker id="sa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/></marker></defs>
+    <!-- flow row -->
+    <rect x="20" y="26" width="110" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="75" y="50" text-anchor="middle" fill="var(--ink)">op arrives</text>
+    <path d="M130 46 L166 46" stroke="var(--ink-3)" fill="none" marker-end="url(#sa)"/>
+    <rect x="170" y="14" width="240" height="64" rx="8" fill="var(--gate-dim)" stroke="var(--gate)"/>
+    <text x="290" y="36" text-anchor="middle" fill="var(--gate)" font-weight="bold">override check — score ignored</text>
+    <text x="290" y="52" text-anchor="middle" fill="var(--ink-2)" font-size="10.5">new entity type · flagged contradiction</text>
+    <text x="290" y="66" text-anchor="middle" fill="var(--ink-2)" font-size="10.5">split · merge into a hub node</text>
+    <path d="M410 46 L446 46" stroke="var(--ink-3)" fill="none" marker-end="url(#sa)"/>
+    <text x="428" y="38" fill="var(--ink-3)" font-size="10">none</text>
+    <rect x="450" y="26" width="200" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="550" y="50" text-anchor="middle" fill="var(--ink)">score = weighted blend</text>
+    <path d="M650 46 L686 46" stroke="var(--ink-3)" fill="none" marker-end="url(#sa)"/>
+    <rect x="690" y="26" width="230" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line-2)"/>
+    <text x="805" y="50" text-anchor="middle" fill="var(--ink)">threshold bands ↓</text>
+    <path d="M290 78 L290 108" stroke="var(--gate)" fill="none" marker-end="url(#sa)"/>
+    <text x="300" y="98" fill="var(--gate)" font-size="10.5">any hit → straight to human review</text>
+
+    <!-- ruler -->
+    <path d="M 609.4 208 l -5 -9 l 10 0 z" fill="var(--ink-2)"/><line x1="609.4" y1="163" x2="609.4" y2="199" stroke="var(--line-2)"/><text x="609.4" y="158" text-anchor="middle" fill="var(--ink-2)" font-size="10.5">novel fact ≈ .67–.70</text><path d="M 716.0 208 l -5 -9 l 10 0 z" fill="var(--ink-2)"/><line x1="716.0" y1="189" x2="716.0" y2="199" stroke="var(--line-2)"/><text x="716.0" y="184" text-anchor="middle" fill="var(--ink-2)" font-size="10.5">merge @0.99 ≈ .80</text><path d="M 781.6 208 l -5 -9 l 10 0 z" fill="var(--ink-2)"/><line x1="781.6" y1="137" x2="781.6" y2="199" stroke="var(--line-2)"/><text x="781.6" y="132" text-anchor="middle" fill="var(--ink-2)" font-size="10.5">2nd source ≈ .88</text><path d="M 855.4 208 l -5 -9 l 10 0 z" fill="var(--ink-2)"/><line x1="855.4" y1="189" x2="855.4" y2="199" stroke="var(--line-2)"/><text x="855.4" y="184" text-anchor="middle" fill="var(--ink-2)" font-size="10.5">3rd source ≈ .97</text>
+    <rect x="60" y="210" width="246" height="26" fill="var(--gate-dim)"/>
+    <rect x="60" y="210" width="246" height="26" fill="none" stroke="var(--hist)" stroke-dasharray="3 3"/>
+    <rect x="306" y="210" width="508.4" height="26" fill="var(--gate-dim)"/>
+    <rect x="814.4" y="210" width="65.6" height="26" fill="var(--accent-dim)" stroke="var(--accent)"/>
+    <text x="183" y="227" text-anchor="middle" fill="var(--hist)" font-size="10.5" font-weight="bold">auto-reject &lt; 0.30</text>
+    <text x="560" y="227" text-anchor="middle" fill="var(--gate)" font-size="10.5" font-weight="bold">human review</text>
+    <text x="847" y="227" text-anchor="middle" fill="var(--accent)" font-size="10" font-weight="bold">auto ≥.92</text>
+    <line x1="306" y1="204" x2="306" y2="242" stroke="var(--line-2)"/>
+    <line x1="814.4" y1="204" x2="814.4" y2="242" stroke="var(--line-2)"/>
+    <text x="60" y="256" fill="var(--ink-3)" font-size="10">0.0</text>
+    <text x="306" y="256" text-anchor="middle" fill="var(--ink-2)" font-size="10">0.30 (KGI_ROUTE_AUTO_REJECT)</text>
+    <text x="814" y="256" text-anchor="middle" fill="var(--ink-2)" font-size="10">0.92 (KGI_ROUTE_AUTO_APPROVE)</text>
+    <text x="880" y="256" fill="var(--ink-3)" font-size="10">1.0</text>
+    <text x="60" y="286" fill="var(--ink-3)" font-size="10.5">markers = the worked scenarios below, plotted. Note where "novel fact" lands: the review band, always.</text>
+    <text x="60" y="302" fill="var(--ink-3)" font-size="10.5">auto-approve is reachable only with resolution ≈ 1.0 and corroboration — trust is earned, not assumed.</text>
+  </svg>
+  </div>
+  <figcaption>FIG 5 — the two gates of step 6: overrides first (score never consulted), then threshold bands on the blended score. Thresholds are .env config.</figcaption>
+  </figure>
+
+  <h3>Worked scenarios — the matrix</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Scenario</th><th>extraction ×.35</th><th>support ×.25</th><th>resolution ×.25</th><th>type ×.15</th><th>Total</th><th>Route</th></tr>
+    <tr><td>Novel entity, first ingest, known type</td><td>.95 → .33</td><td>1 quote → .08</td><td>new = .5 → .13</td><td>1 → .15</td><td><strong>.69</strong></td><td>review</td></tr>
+    <tr><td>Novel edge between known entities</td><td>.90 → .32</td><td>1 → .08</td><td>.5 → .13</td><td>1 → .15</td><td><strong>.67</strong></td><td>review</td></tr>
+    <tr><td>Merge via embedding 0.99</td><td>.90 → .32</td><td>1 → .08</td><td>.99 → .25</td><td>1 → .15</td><td><strong>.80</strong></td><td>review</td></tr>
+    <tr><td>Duplicate fact, 2nd source (reinforce)</td><td>.90 → .32</td><td>2 → .17</td><td>1.0 → .25</td><td>1 → .15</td><td><strong>.88</strong></td><td>review — just under</td></tr>
+    <tr><td>Duplicate fact, 3rd source</td><td>.95 → .33</td><td>3 → .25</td><td>1.0 → .25</td><td>1 → .15</td><td><strong>.97</strong></td><td><span class="pill built">auto-approve</span></td></tr>
+    <tr><td>Anything with a never-seen type</td><td colspan="4">—</td><td>—</td><td>review (override)</td></tr>
+    <tr><td>Flagged contradiction (step 5)</td><td colspan="4">—</td><td>—</td><td>review (override)</td></tr>
+    <tr><td>Garbled extraction, weak quote</td><td>.20 → .07</td><td>1 → .08</td><td>.5 → .13</td><td>0 → 0</td><td><strong>.28</strong></td><td>auto-reject</td></tr>
+  </table></div>
+
+  <div class="panel gate">
+    <span class="tag">Calibration honesty</span>
+    <p>Read the matrix's consequence: <strong>on a cold graph, auto-approve is
+    mathematically unreachable</strong> — novel facts cap ≈0.70, and only
+    triple-corroborated duplicates clear 0.92. That is deliberate skepticism, but one
+    signal is genuinely mis-scored: when the best similarity hit is 0.41, "new" isn't
+    <em>uncertainty</em> — it's positive evidence of novelty, and scoring it 0.5
+    conflates the two. The levers, cheapest first: lower
+    <code>KGI_ROUTE_AUTO_APPROVE</code> in <code>.env</code> for bulk/benchmark runs;
+    fix the resolution signal to reward decisive no-matches (≈0.9 for "confidently
+    new"); calibrate thresholds against the gold labels in
+    <code>examples/benchmarks/</code> once the eval harness exists
+    (<a href="#scale">Scaling up</a>).</p>
+  </div>
+
+  <h3>This is gate one of three</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Gate</th><th>When</th><th>What it decides</th></tr>
+    <tr><td>Routing (this page)</td><td>step 6, automatic</td><td>Who must look: nobody (auto) or a human. Never writes anything.</td></tr>
+    <tr><td>Human review</td><td>step 8, whenever you get to it</td><td>Accept / edit / reject / defer, per op — the only judgment that admits knowledge.</td></tr>
+    <tr><td>Commit checks</td><td>step 9, per op, in-transaction</td><td>Even approved ops can still be stopped: already applied → skip; graph changed since drafting → requeue; dependency rejected → blocked.</td></tr>
+  </table></div>
+  <p style="font-size:13px">
+    A fact reaches the graph only by passing all three — and the third gate is why
+    approvals that sat in a queue for days are still safe to apply.
+  </p>
+</section>
+
 <!-- ── 07 QUERY ────────────────────────────────── -->
 <section class="page" id="query">
-  <div class="kicker">06 · Query path</div>
+  <div class="kicker">07 · Query path</div>
   <h2>Embed, walk the graph, answer</h2>
 
   <figure><div class="fig-wrap">
@@ -1143,7 +1251,7 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
 
 <!-- ── 08 DESIGN RECORD ────────────────────────── -->
 <section class="page" id="design">
-  <div class="kicker">07 · Design decisions</div>
+  <div class="kicker">08 · Design decisions</div>
   <h2>Decisions and the audit model</h2>
   <div class="table-wrap"><table>
     <tr><th>Decision</th><th>Choice</th><th>Consequence</th></tr>
@@ -1168,7 +1276,7 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
 </section>
 
 <section class="page" id="scale">
-  <div class="kicker">08 · Scaling up — good to have</div>
+  <div class="kicker">09 · Scaling up — good to have</div>
   <h2>What changes when the numbers grow</h2>
   <p>
     Nothing on this page is built. It is the agreed direction for four axes of growth
@@ -1240,7 +1348,7 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
 
 <!-- ── 09 STATUS ───────────────────────────────── -->
 <section class="page" id="status">
-  <div class="kicker">09 · Status</div>
+  <div class="kicker">10 · Status</div>
   <h2>Verified vs deferred</h2>
   <div class="table-wrap"><table>
     <tr><th></th><th>Capability</th><th>Note</th></tr>
@@ -1264,7 +1372,7 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
 
 <!-- ── 10 REFERENCES ───────────────────────────── -->
 <section class="page" id="references">
-  <div class="kicker">10 · References</div>
+  <div class="kicker">11 · References</div>
   <h2>Publications and systems informing the design</h2>
   <ol class="refs">
     <li><b>Edge et al., "From Local to Global: A GraphRAG Approach"</b> (2024) —
