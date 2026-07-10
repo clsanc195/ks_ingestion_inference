@@ -12,6 +12,7 @@
     --accent: #0b7e99; --accent-dim: rgba(11,126,153,.08);
     --gate: #b45309; --gate-dim: rgba(180,83,9,.09);
     --llm: #6d4fc4; --llm-dim: rgba(109,79,196,.10);
+    --tok-str: #177a45;
     --shadow: 0 1px 2px rgba(14,17,22,.05);
   }
   @media (prefers-color-scheme: dark) { :root {
@@ -21,6 +22,7 @@
     --accent: #2fb6cf; --accent-dim: rgba(47,182,207,.10);
     --gate: #dd9433; --gate-dim: rgba(221,148,51,.12);
     --llm: #a292ee; --llm-dim: rgba(162,146,238,.13);
+    --tok-str: #82c99b;
     --shadow: none;
   }}
   :root[data-theme="light"] {
@@ -30,6 +32,7 @@
     --accent: #0b7e99; --accent-dim: rgba(11,126,153,.08);
     --gate: #b45309; --gate-dim: rgba(180,83,9,.09);
     --llm: #6d4fc4; --llm-dim: rgba(109,79,196,.10);
+    --tok-str: #177a45;
     --shadow: 0 1px 2px rgba(14,17,22,.05);
   }
   :root[data-theme="dark"] {
@@ -39,6 +42,7 @@
     --accent: #2fb6cf; --accent-dim: rgba(47,182,207,.10);
     --gate: #dd9433; --gate-dim: rgba(221,148,51,.12);
     --llm: #a292ee; --llm-dim: rgba(162,146,238,.13);
+    --tok-str: #82c99b;
     --shadow: none;
   }
 
@@ -193,6 +197,13 @@
   .ex .dim { color: var(--ink-3); }
   .nav-label { font: 600 9px/1 ui-monospace, Menlo, monospace; letter-spacing: .16em;
     color: var(--ink-3); padding: 14px 22px 6px; }
+  .tok-kw { color: var(--accent); font-weight: 620; }
+  .tok-str { color: var(--tok-str); }
+  .tok-com { color: var(--ink-3); font-style: italic; }
+  .tok-num { color: var(--gate); }
+  .tok-var { color: var(--llm); }
+  .tok-role { color: var(--llm); font-weight: 700; }
+  pre { line-height: 1.7; }
   .pill { display: inline-block; font: 650 9.5px/1 ui-monospace, Menlo, monospace; letter-spacing: .09em;
     text-transform: uppercase; border-radius: 5px; padding: 4px 8px; }
   .pill.built { background: var(--accent-dim); color: var(--accent); }
@@ -518,7 +529,7 @@
   </table></div>
 
   <h3>The Neo4j data model, concretely</h3>
-  <pre><code>(:Canonical {id, name, entity_type, confidence, …props})          — an entity
+  <pre><code class="lang-cypher">(:Canonical {id, name, entity_type, confidence, …props})          — an entity
 (a:Canonical)-[:REL {id, predicate, valid_from, valid_to,
                      support, confidence}]->(b:Canonical)          — a fact
 (:Alias {match_method, match_score})-[:SAME_AS]->(:Canonical)      — an undoable merge
@@ -725,21 +736,22 @@
   <div class="ex">sha256(profile.md) → doc_a1b2c3…
 Neo4j :Document{hash}?  → not found → <span class="ok">continue</span>
 <span class="dim">(found → "duplicate — nothing to do", run ends)</span></div>
-  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">stores/neo4j.py · document_committed()</span></div><pre><code>MATCH (d:Document {content_hash: $h}) RETURN d LIMIT 1</code></pre></div>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/ingestion/base.py:29 · register_document()</span></div><pre><code>content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">stores/neo4j.py · document_committed()</span></div><pre><code class="lang-cypher">MATCH (d:Document {content_hash: $h}) RETURN d LIMIT 1</code></pre></div>
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/ingestion/base.py:29 · register_document()</span></div><pre><code class="lang-python">content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
 return Document(
     doc_id=f"doc_{content_hash[:16]}",   # identity IS content
     modality=modality,
     source_uri=str(path.resolve()),
     content_hash=content_hash, ...)</code></pre></div>
-  <p>
-    Two properties fall out of this step. Re-ingesting the same file a hundred times
-    can never create duplicates — it dies here ninety-nine times. And nothing is
-    <em>written</em> yet: the hash marker is only recorded at the very end (step 9,
-    after a successful commit), so a run that fails or gets rejected midway leaves the
-    document re-ingestable. The two-line <code>is_duplicate()</code> function in
-    <code>pipeline/graph.py:80</code> is the first conditional edge in the LangGraph.
-  </p>
+  <ul class="tight">
+    <li><strong>Idempotent by construction.</strong> Re-ingesting the same file a
+      hundred times can never create duplicates — it dies here ninety-nine times.</li>
+    <li><strong>Nothing is written yet.</strong> The hash marker is only recorded
+      after a successful commit (step 9), so a failed or rejected run leaves the
+      document re-ingestable.</li>
+  </ul>
+  <p>The two-line <code>is_duplicate()</code> function in
+  <code>pipeline/graph.py:80</code> is the first conditional edge in the LangGraph.</p>
 </section>
 
 <section class="page" id="s2">
@@ -758,7 +770,7 @@ block 1: paragraph  "Acme Corp is headquartered in Basel. Elena Vogel
 
 unit_id:  doc_a1b2c3_b1_u0        <span class="dim">← lineage: doc + block</span>
 context:  {"headings": ["Acme profile"]}</div>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/decomposition/atomizer.py:10 · decompose()</span></div><pre><code>for block in ndoc.blocks:
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/decomposition/atomizer.py:10 · decompose()</span></div><pre><code class="lang-python">for block in ndoc.blocks:
     if block.kind == "heading" or not block.text.strip():
         continue                      # headings travel as context, not content
     units.append(ExtractionUnit(
@@ -766,16 +778,18 @@ context:  {"headings": ["Acme profile"]}</div>
         doc_id=ndoc.doc.doc_id,
         text=block.text,
         context=block.context))       # the heading stack rides along</code></pre></div>
-  <p>
-    The cut is <strong>by paragraph, not sentence</strong> — both sentences travel
-    together, so when the LLM reads "Elena Vogel has been CEO," the sentence naming
-    Acme is right there. Our document → exactly 1 unit; a ten-paragraph report → 10
-    units → 10 LLM calls next step, which is why the cut point directly sets ingestion
-    cost. The <code>unit_id</code> is the future evidence anchor: a fact stored months
-    from now points back through it to the exact block of the exact document.
-    Sentence-level "atomic fact" splitting is the planned upgrade behind this same
-    function. BPMN files skip this step entirely — they are already graphs.
-  </p>
+  <ul class="tight">
+    <li><strong>The cut is by paragraph, not sentence</strong> — both sentences travel
+      together, so "Elena Vogel has been CEO" keeps the sentence naming Acme right
+      next to it.</li>
+    <li><strong>Unit count = LLM cost.</strong> Our document → 1 unit. A ten-paragraph
+      report → 10 units → 10 LLM calls in step 3.</li>
+    <li><strong><code>unit_id</code> is the future evidence anchor</strong> — a fact
+      stored months from now points back through it to the exact block of the exact
+      document.</li>
+  </ul>
+  <p>Sentence-level "atomic fact" splitting is the planned upgrade behind this same
+  function. BPMN files skip this step entirely — they are already graphs.</p>
 </section>
 
 <section class="page" id="s3">
@@ -790,7 +804,7 @@ context:  {"headings": ["Acme profile"]}</div>
     Instructor — malformed responses are automatically re-asked; there is no free-text
     parsing anywhere.
   </p>
-  <div class="op llm"><div class="op-h"><span class="op-tag">LLM CALL</span><span class="op-t">extractor · one call per paragraph · src/kgi/extraction/extractor.py</span></div><pre><code>SYSTEM: You extract knowledge-graph candidates from one unit of text.
+  <div class="op llm"><div class="op-h"><span class="op-tag">LLM CALL</span><span class="op-t">extractor · one call per paragraph · src/kgi/extraction/extractor.py</span></div><pre><code class="lang-prompt">SYSTEM: You extract knowledge-graph candidates from one unit of text.
 Return every entity and relation the text explicitly asserts — nothing
 implied or inferred beyond the text. Each item must include a verbatim
 supporting quote.
@@ -805,20 +819,21 @@ Text: {the paragraph}</code></pre></div>
            <span class="dim">quote: "Acme Corp is headquartered in Basel"</span>
            (Elena Vogel) —is CEO of→ (Acme Corp) · valid_from 2020
            <span class="dim">quote: "…has been CEO of Acme Corp since 2020"</span></div>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/llm.py · structured_call() — the one entry point for all four LLM roles</span></div><pre><code>result, completion = _client().chat.completions.create_with_completion(
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/llm.py · structured_call() — the one entry point for all four LLM roles</span></div><pre><code class="lang-python">result, completion = _client().chat.completions.create_with_completion(
     model=model,
     response_model=response_model,     # Pydantic schema — retry on mismatch
     messages=[{"role": "system", "content": system},
               {"role": "user", "content": user}])
 gen.update(output=result.model_dump(),           # → Langfuse: prompt,
            usage_details={"input": ..., "output": ...})  # output, tokens</code></pre></div>
-  <p>
-    Each candidate gets a throwaway temp id — whether "Acme Corp" is new or already
-    known is precisely the next step's question. Note the date was captured
-    (<code>valid_from 2020</code> from "since 2020"): raw material for the
-    time-window machinery. Still nothing written to any database; the only external
-    trace is the Langfuse log of this call.
-  </p>
+  <ul class="tight">
+    <li><strong>Temp ids only.</strong> Whether "Acme Corp" is new or already known is
+      precisely step 4's question — candidates carry throwaway ids until then.</li>
+    <li><strong>The date was captured</strong> — <code>valid_from 2020</code> from
+      "since 2020": raw material for the time-window machinery.</li>
+    <li><strong>Nothing written to any database.</strong> The only external trace is
+      the Langfuse log of this call.</li>
+  </ul>
 </section>
 
 <section class="page" id="s4">
@@ -857,34 +872,35 @@ tier 2   embed the name, search Qdrant   → "Acme Corporation" scores 0.99
 <span class="dim">── tier 3 (not triggered by this document) ───────────────────
 a score between 0.70 and 0.93 is too close to call either way;
 the LLM-as-judge decides, instructed to prefer "different"</span></div>
-  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">tier 1 · stores/neo4j.py · find_by_name()</span></div><pre><code>MATCH (n:Canonical)
+  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">tier 1 · stores/neo4j.py · find_by_name()</span></div><pre><code class="lang-cypher">MATCH (n:Canonical)
 WHERE toLower(n.name) = toLower($name)
 RETURN n LIMIT 1</code></pre></div>
-  <div class="op qdr"><div class="op-h"><span class="op-tag">QDRANT</span><span class="op-t">tier 2 · stores/qdrant.py · nearest() — embedding computed locally (bge-small, no API)</span></div><pre><code>client.query_points("kgi-entities",
+  <div class="op qdr"><div class="op-h"><span class="op-tag">QDRANT</span><span class="op-t">tier 2 · stores/qdrant.py · nearest() — embedding computed locally (bge-small, no API)</span></div><pre><code class="lang-python">client.query_points("kgi-entities",
     query=embed(entity.name),   # 384-dim local embedding
     limit=5)                    # → [(canonical_id, cosine score), …]</code></pre></div>
-  <div class="op llm"><div class="op-h"><span class="op-tag">LLM-AS-JUDGE</span><span class="op-t">tier 3, ambiguous band only · src/kgi/resolution/cascade.py</span></div><pre><code>SYSTEM: You are an entity-resolution judge for a knowledge graph.
+  <div class="op llm"><div class="op-h"><span class="op-tag">LLM-AS-JUDGE</span><span class="op-t">tier 3, ambiguous band only · src/kgi/resolution/cascade.py</span></div><pre><code class="lang-prompt">SYSTEM: You are an entity-resolution judge for a knowledge graph.
 Decide whether the NEW entity is the same real-world thing as one of
 the CANONICAL candidates. Same thing under a different name or
 abbreviation -> match. Related but distinct (a successor product, a
 sibling, a parent company, a different person with a similar name)
 -> NOT a match. When genuinely uncertain, answer null: a false merge
 corrupts the graph and is much harder to detect than a duplicate.</code></pre></div>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/resolution/cascade.py · resolve_entity() — the cascade</span></div><pre><code>match = graph.find_by_name(entity.name)          # tier 1: exact
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/resolution/cascade.py · resolve_entity() — the cascade</span></div><pre><code class="lang-python">match = graph.find_by_name(entity.name)          # tier 1: exact
 if match: return MatchResult(match["id"], 1.0, "rules")
 hits = vectors.nearest(entity.name, limit=5)      # tier 2: embeddings
 if hits[0]["score"] >= 0.93:  return MatchResult(hits[0]["canonical_id"], ...)
 if hits[0]["score"] &lt;  0.70:  return MatchResult(None, ...)   # new entity
 return _llm_tier(entity, band)                    # tier 3: the judge</code></pre></div>
-  <p>
-    The 0.93 / 0.70 bands aren't guesses — measured on real pairs,
-    <em>GripperOne vs GripperTwo</em> (genuinely different products) scored 0.87.
-    That's why 0.87 must not auto-merge, and why the judge exists — prompted to prefer
-    "different" when unsure. Predicates get the lighter version of the same treatment:
-    "based in" maps onto the known "headquartered in" at ≥0.85 similarity. And
-    everything searched here contains <strong>only approved knowledge</strong> —
-    candidates still waiting in someone's review queue are invisible to matching.
-  </p>
+  <ul class="tight">
+    <li><strong>The bands are measured, not guessed.</strong> On real pairs,
+      <em>GripperOne vs GripperTwo</em> — genuinely different products — scored 0.87.
+      That's why 0.87 must not auto-merge, and why the judge exists (prompted to
+      prefer "different" when unsure).</li>
+    <li><strong>Predicates get the lighter version</strong> of the same treatment:
+      "based in" maps onto the known "headquartered in" at ≥0.85 similarity.</li>
+    <li><strong>Only approved knowledge is searchable.</strong> Candidates still
+      waiting in someone's review queue are invisible to matching here.</li>
+  </ul>
 </section>
 
 <section class="page" id="s5">
@@ -900,12 +916,12 @@ return _llm_tier(entity, band)                    # tier 3: the judge</code></pr
   <div class="ex">new:      (Acme Corporation) —headquartered in→ (Basel)
 existing: (Acme Corporation) —headquartered in→ (Zurich)   valid_to: NULL
               same subject + predicate ─────────── different object → <span class="warn">collision</span></div>
-  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">both directions · stores/neo4j.py · edges_from() / edges_to()</span></div><pre><code>MATCH (a:Canonical {id: $subj})-[r:REL {predicate: $pred}]->(b:Canonical)
+  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">both directions · stores/neo4j.py · edges_from() / edges_to()</span></div><pre><code class="lang-cypher">MATCH (a:Canonical {id: $subj})-[r:REL {predicate: $pred}]->(b:Canonical)
 WHERE r.valid_to IS NULL              // current facts only
 RETURN r, b.id AS object_id, b.name AS object_name
 // mirrored query checks (*)-[predicate]->(object): a new person
 // claiming a role someone currently holds</code></pre></div>
-  <div class="op llm"><div class="op-h"><span class="op-tag">LLM-AS-JUDGE</span><span class="op-t">conflict verdict · src/kgi/conflict/engine.py</span></div><pre><code>SYSTEM: You adjudicate potential contradictions in a knowledge graph.
+  <div class="op llm"><div class="op-h"><span class="op-tag">LLM-AS-JUDGE</span><span class="op-t">conflict verdict · src/kgi/conflict/engine.py</span></div><pre><code class="lang-prompt">SYSTEM: You adjudicate potential contradictions in a knowledge graph.
 An existing fact and a new fact share the same predicate and one
 endpoint, but differ on the other endpoint. Classify the pair:
 - compatible: both can be true at the same time (a company has many
@@ -918,15 +934,17 @@ endpoint, but differ on the other endpoint. Classify the pair:
 Be conservative: if the evidence does not clearly indicate change over
 time, answer semantic_conflict. A wrong supersession silently rewrites
 history; an escalation only costs one human review.</code></pre></div>
-  <p>
-    Three verdicts, three destinies: <strong>both true</strong> → assert alongside;
-    <strong>value changed over time</strong> → the patch automatically pairs the new
-    assert with an <code>invalidate_edge</code> end-dating the old fact — history
-    preserved, no human needed; <strong>true contradiction</strong> — our case: a flat
-    claim with no move language, no dates — → the op is flagged and will be
-    <strong>forced to human review</strong> regardless of its score.
-  </p>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/conflict/engine.py · correlate_relation() — collision collection</span></div><pre><code>colliding = []
+  <p>Three verdicts, three destinies:</p>
+  <ul class="tight">
+    <li><strong>Both true</strong> → assert alongside; a company has many products.</li>
+    <li><strong>Value changed over time</strong> → the patch automatically pairs the
+      new assert with an <code>invalidate_edge</code> end-dating the old fact —
+      history preserved, no human needed.</li>
+    <li><strong>True contradiction</strong> — our case: a flat claim, no move
+      language, no dates → the op is flagged and <strong>forced to human
+      review</strong> regardless of its score.</li>
+  </ul>
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/conflict/engine.py · correlate_relation() — collision collection</span></div><pre><code class="lang-python">colliding = []
 if subject_ref.canonical_id:      # company moved?  same subject, new object
     colliding += [e for e in graph.edges_from(subj_id, rel.predicate)
                   if e["object_id"] != object_ref.canonical_id]
@@ -952,7 +970,7 @@ for old in colliding:
     contradiction, or a merge into a heavily-connected node always goes to review.
     High confidence doesn't buy past those.
   </p>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/confidence/scorer.py + src/kgi/routing/policy.py</span></div><pre><code>WEIGHTS = {"extraction": 0.35,   # what the extractor reported
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/confidence/scorer.py + src/kgi/routing/policy.py</span></div><pre><code class="lang-python">WEIGHTS = {"extraction": 0.35,   # what the extractor reported
            "support":    0.25,   # how many evidence quotes back it
            "resolution": 0.25,   # dedup match quality
            "validation": 0.15}   # is the entity type already known?
@@ -966,15 +984,17 @@ return review</code></pre></div>
 op2 create_node Basel                       .71 → review
 op3 assert_edge HQ→Basel  <span class="warn">⚠ contradiction</span>    — → review <span class="warn">(forced)</span>
 op4 assert_edge CEO, from 2020              .94 → <span class="ok">auto-approve ✓</span></div>
-  <p>
-    The CEO fact cleared 0.92 — no human will ever look at it. But
-    <strong>auto-approve ≠ auto-write</strong>: it's a status on a line in a patch,
-    and it touches the graph only in step 9 with everything else. The weights are
-    honest guesses versioned in code; every accept/reject a reviewer makes is stored
-    as a labeled example, which is exactly what will calibrate them later. If
-    <em>everything</em> in a patch auto-approves, the run skips the review pause
-    entirely — that's the <code>needs_review</code> diamond in the LangGraph figure.
-  </p>
+  <ul class="tight">
+    <li><strong>Auto-approve ≠ auto-write.</strong> The CEO op cleared 0.92, so no
+      human will look at it — but its approval is a status on a line in a patch. It
+      touches the graph only in step 9, with everything else.</li>
+    <li><strong>The weights are versioned guesses.</strong> Every reviewer
+      accept/reject is stored as a labeled example — exactly the data that will
+      calibrate them later.</li>
+    <li><strong>All-auto patches skip the pause.</strong> If every op auto-approves,
+      the run bypasses review entirely — the <code>needs_review</code> diamond in the
+      LangGraph figure.</li>
+  </ul>
 </section>
 
 <section class="page" id="s7">
@@ -988,11 +1008,11 @@ op4 assert_edge CEO, from 2020              .94 → <span class="ok">auto-approv
     search can ever treat half-approved knowledge as real. Staging and the main graph
     share a database, separated by shape.
   </p>
-  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">staging write · stores/neo4j.py · save_patch()</span></div><pre><code>MERGE (p:Patch {id: $id})
+  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">staging write · stores/neo4j.py · save_patch()</span></div><pre><code class="lang-cypher">MERGE (p:Patch {id: $id})
 SET p.doc_id = $doc_id, p.status = 'pending',
     p.json = $json,                    // the whole patch, serialized
     p.thread_id = $thread_id           // which paused run to wake later</code></pre></div>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/pipeline/graph.py · review_node() — where the run freezes</span></div><pre><code>def review_node(state):
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/pipeline/graph.py · review_node() — where the run freezes</span></div><pre><code class="lang-python">def review_node(state):
     patch = state["patch"]
     decisions = interrupt({              # ← LangGraph checkpoints to Postgres
         "patch_id": patch.patch_id,      #   and STOPS. Process exits here.
@@ -1004,12 +1024,14 @@ Neo4j staging      one :Patch node, status "pending"
 Postgres           the run's checkpoint (resumable)
 Qdrant             unchanged — staged names are never indexed
 your machine       no kgi process running at all</div>
-  <p>
-    You see <code>parked at review gate — patch_7f3e21, 3 ops awaiting review</code>
-    and get your prompt back. This state holds for an hour or a month; reboot
-    anything — the patch and the checkpoint both survive. Even the auto-approved CEO
-    op is just sitting in that JSON: "approved" is a status, not a write.
-  </p>
+  <ul class="tight">
+    <li>You see <code>parked at review gate — patch_7f3e21, 3 ops awaiting review</code>
+      and get your shell prompt back.</li>
+    <li>This state holds for an hour or a month. Reboot anything — the patch and the
+      checkpoint both survive.</li>
+    <li>Even the auto-approved CEO op is just JSON right now: "approved" is a status,
+      not a write.</li>
+  </ul>
 </section>
 
 <section class="page" id="s8">
@@ -1028,11 +1050,11 @@ op2 create_node  'Basel' (Place)                                     <span class
 op3 assert_edge  CONFLICTS with (Acme)—headquartered in→(Zurich):
                  flat claim, no relocation evidence        <span class="warn">✗ reject — "Zurich is correct"</span>
 <span class="dim">op4 not shown — auto-approved in step 6, needs nothing from you</span></div>
-  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">every click becomes a record · stores/neo4j.py · save_decision()</span></div><pre><code>CREATE (d:ReviewDecision {id: $id, patch_id: $patch_id, op_id: $op_id,
+  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">every click becomes a record · stores/neo4j.py · save_decision()</span></div><pre><code class="lang-cypher">CREATE (d:ReviewDecision {id: $id, patch_id: $patch_id, op_id: $op_id,
         reviewer_id: $reviewer,        // who
         action: $action, note: $note,  // what and why
         decided_at: $at})              // when</code></pre></div>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">the resume · cli.py / viewer POST → src/kgi/pipeline/graph.py</span></div><pre><code># CLI or browser submit:
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">the resume · cli.py / viewer POST → src/kgi/pipeline/graph.py</span></div><pre><code class="lang-python"># CLI or browser submit:
 result = pipeline.invoke(Command(resume=decisions),
                          {"configurable": {"thread_id": thread}})
 # LangGraph loads the Postgres checkpoint and continues review_node
@@ -1040,13 +1062,13 @@ result = pipeline.invoke(Command(resume=decisions),
 if action in ("accept", "force_merge"): routed.status = APPROVED
 elif action == "reject":                routed.status = REJECTED
 # defer: no decision recorded — op stays pending, held back at commit</code></pre></div>
-  <p>
-    These decision records are the piece of the audit trail only a human can produce
-    — and the future training data for calibrating step 6. Note what rejection means:
-    op3 is not deleted. It stays in the patch JSON forever, marked rejected, with your
-    note. An auditor next year sees the Basel claim arrived, who declined it, and why.
-    It just never becomes graph structure.
-  </p>
+  <ul class="tight">
+    <li><strong>Decisions are the human half of the audit trail</strong> — and the
+      future training data for calibrating step 6's weights.</li>
+    <li><strong>Rejection ≠ deletion.</strong> op3 stays in the patch JSON forever,
+      marked rejected, with your note. An auditor next year sees the Basel claim
+      arrived, who declined it, and why. It just never becomes graph structure.</li>
+  </ul>
 </section>
 
 <section class="page" id="s9">
@@ -1060,14 +1082,14 @@ elif action == "reject":                routed.status = REJECTED
     and dependencies (edge whose endpoint was rejected? blocked). Pass all three →
     the write and its audit record commit <em>in the same transaction</em>.
   </p>
-  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/commit/engine.py · the per-op transaction</span></div><pre><code>def _tx(tx, routed=routed, op=op):
+  <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/commit/engine.py · the per-op transaction</span></div><pre><code class="lang-python">def _tx(tx, routed=routed, op=op):
     if tx.run("MATCH (a:AppliedOp {op_id: $id}) RETURN a", id=op.op_id).single():
         return "committed"                        # ledger: already applied
     if not all(_check_precondition(tx, p) for p in op.preconditions):
         return "requeued"                         # graph moved → don't apply blind
     applier.apply(tx, op)                         # the write + :AppliedOp receipt
     return "committed"</code></pre></div>
-  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">the CEO fact lands · from _OpApplier (fixed Cypher per op type)</span></div><pre><code>MATCH (a:Canonical {id: $subj}), (b:Canonical {id: $obj})
+  <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">the CEO fact lands · from _OpApplier (fixed Cypher per op type)</span></div><pre><code class="lang-cypher">MATCH (a:Canonical {id: $subj}), (b:Canonical {id: $obj})
 MERGE (a)-[r:REL {id: $eid}]->(b)
 SET r.predicate = 'is CEO of', r.valid_from = '2020', r.valid_to = null,
     r.support = coalesce(r.support, 1), r.confidence = $conf
@@ -1080,17 +1102,18 @@ op4 assert_edge → (Elena Vogel)-[is CEO of, from 2020]→(Acme)          <span
 op3             → <span class="warn">rejected — never reaches this code</span>
 then: Qdrant += "Basel" vectors · :Document{hash} marked done
       re-ingesting profile.md tomorrow → stops at step 1</div>
-  <p>
-    Final state: one new place, one undoable merge link, one CEO fact with a start
-    date. Zurich is still the headquarters — the Basel claim survives only as a
-    rejected op with a note in the audit trail. <code>kgi ask "who runs Acme?"</code>
-    now answers <em>Elena Vogel, since 2020</em>, cited to profile.md — and the
-    viewer shows the full chain per fact: quote → document → commit receipt →
-    who approved it (or "auto-approved by policy"). New node ids are minted
-    deterministically from patch + op id, so even a crash mid-commit converges on
-    the same graph when retried. <code>tests/test_commit_integration.py</code>
-    exercises every edge case above against a live Neo4j.
-  </p>
+  <p><strong>Final state:</strong> one new place, one undoable merge link, one CEO
+  fact with a start date. Zurich is still the headquarters — the Basel claim survives
+  only as a rejected op with a note in the audit trail.</p>
+  <ul class="tight">
+    <li><code>kgi ask "who runs Acme?"</code> → <em>Elena Vogel, since 2020</em>,
+      cited to profile.md. The viewer shows the full chain per fact: quote → document
+      → commit receipt → who approved it (or "auto-approved by policy").</li>
+    <li>Node ids are minted deterministically from patch + op id — a crash mid-commit
+      converges on the same graph when retried.</li>
+    <li><code>tests/test_commit_integration.py</code> exercises every edge case above
+      against a live Neo4j.</li>
+  </ul>
 </section>
 
 <!-- ── 07 QUERY ────────────────────────────────── -->
@@ -1208,6 +1231,50 @@ then: Qdrant += "Basel" vectors · :Document{hash} marked done
 </section>
 
 </main>
+<script>
+(function () {
+  var esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  var LANGS = {
+    'lang-python': [
+      ['tok-com', /#[^\n]*/],
+      ['tok-str', /\"\"\"[\s\S]*?\"\"\"|'[^'\n]*'|\"[^\"\n]*\"/],
+      ['tok-kw', /\b(?:def|return|if|elif|else|for|in|not|and|or|import|from|class|None|True|False|raise|assert|with|as|lambda|while|continue|break|try|except|finally|global|yield)\b/],
+      ['tok-num', /\b\d+(?:\.\d+)?\b/]
+    ],
+    'lang-cypher': [
+      ['tok-com', /\/\/[^\n]*/],
+      ['tok-str', /'[^'\n]*'|\"[^\"\n]*\"/],
+      ['tok-var', /\$\w+|:\w+/],
+      ['tok-kw', /\b(?:MATCH|WHERE|RETURN|MERGE|SET|CREATE|DELETE|DETACH|LIMIT|AS|OPTIONAL|WITH|UNWIND|AND|OR|NOT|IN|IS|NULL|ORDER|BY|coalesce|count|toLower)\b/],
+      ['tok-num', /\b\d+(?:\.\d+)?\b/]
+    ],
+    'lang-prompt': [
+      ['tok-role', /^(?:SYSTEM|USER):/m],
+      ['tok-var', /\{[^}\n]*\}/],
+      ['tok-str', /\"[^\"\n]*\"/],
+      ['tok-kw', /->/]
+    ]
+  };
+  document.querySelectorAll('code[class*="lang-"]').forEach(function (el) {
+    var lang = el.className.match(/lang-\w+/); if (!lang || !LANGS[lang[0]]) return;
+    var rules = LANGS[lang[0]];
+    var master = new RegExp(rules.map(function (r) { return '(' + r[1].source + ')'; }).join('|'), 'gm');
+    var src = el.textContent, out = '', last = 0, m;
+    while ((m = master.exec(src)) !== null) {
+      out += esc(src.slice(last, m.index));
+      var placed = false;
+      for (var i = 0; i < rules.length; i++) {
+        if (m[i + 1] !== undefined) { out += '<span class="' + rules[i][0] + '">' + esc(m[0]) + '</span>'; placed = true; break; }
+      }
+      if (!placed) out += esc(m[0]);
+      last = m.index + m[0].length;
+      if (m[0].length === 0) master.lastIndex++;
+    }
+    out += esc(src.slice(last));
+    el.innerHTML = out;
+  });
+})();
+</script>
 <script>
 (function () {
   var sections = Array.prototype.slice.call(document.querySelectorAll('section.page'));
