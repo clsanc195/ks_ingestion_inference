@@ -296,7 +296,7 @@ function draw() {
 
 // --- force simulation: settles, then stays slightly alive (Obsidian-style) ---
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const AMBIENT = REDUCED_MOTION ? 0 : 0.045;   // energy floor — the "alive" part
+const AMBIENT = REDUCED_MOTION ? 0 : 0.02;   // energy floor — the "alive" part
 function startSim() {
   let alpha = 1;
   const W = el('svg').clientWidth, H = el('svg').clientHeight;
@@ -326,8 +326,8 @@ function startSim() {
     for (const n of nodes) {
       n.vx += (W / 2 - n.x) * 0.002 * alpha; n.vy += (H / 2 - n.y) * 0.002 * alpha;
       if (alpha < 0.2 && AMBIENT) {          // gentle wander once mostly settled
-        n.vx += Math.sin(t * 0.5 + n.ph) * 0.045;
-        n.vy += Math.cos(t * 0.43 + n.ph * 1.7) * 0.045;
+        n.vx += Math.sin(t * 0.22 + n.ph) * 0.016;
+        n.vy += Math.cos(t * 0.19 + n.ph * 1.7) * 0.016;
       }
       if (n !== dragNode) { n.x += n.vx; n.y += n.vy; }
     }
