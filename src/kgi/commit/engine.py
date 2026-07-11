@@ -66,6 +66,15 @@ def _check_precondition(tx, pre: Precondition) -> bool:
             "(b:Canonical {id: $obj}) WHERE r.valid_to IS NULL RETURN r.id",
             subj=pre.subject, pred=pre.expected["predicate"], obj=pre.expected["object_id"],
         ).single() is None
+    if pre.kind == "name_absent":
+        # Rebase check for creates: another patch may have landed an identically
+        # named entity between resolve and commit (the gate breaks strict
+        # ordering). Requeue for re-resolution instead of minting a twin.
+        return tx.run(
+            "MATCH (n:Canonical) WHERE toLower(n.name) = toLower($name) "
+            "RETURN n.id LIMIT 1",
+            name=pre.subject,
+        ).single() is None
     if pre.kind == "prop_equals":
         rec = tx.run(
             "MATCH (n:Canonical {id: $id}) RETURN n[$prop] AS v",

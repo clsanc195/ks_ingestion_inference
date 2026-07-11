@@ -130,6 +130,25 @@ def test_precondition_failure_requeues(graph):
     assert patch.ops[0].status == OpStatus.requeued
 
 
+def test_create_requeues_when_name_landed_meanwhile(graph):
+    # A doc ingested while an earlier patch was parked: by commit time the
+    # "new" entity exists (any casing). Requeue, don't mint a twin.
+    _seed_edge(graph)  # seeds node named 'A'
+    patch = _patch([
+        _routed(CreateNode(
+            op_id="n1", temp_id="t1", entity_type="Agent",
+            properties={"name": "a"},
+            preconditions=[Precondition(kind="name_absent", subject="a")],
+        )),
+    ])
+    report = commit_patch(graph, patch)
+    assert report.requeued == ["n1"]
+    with graph.session() as s:
+        c = s.run("MATCH (n:Canonical) WHERE toLower(n.name)='a' "
+                  "RETURN count(n) AS c").single()["c"]
+    assert c == 1  # still just the original
+
+
 def test_blocked_when_dependency_requeued(graph):
     patch = _patch([
         _routed(CreateNode(

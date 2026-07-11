@@ -322,6 +322,12 @@ def resolve_node(state: IngestState) -> dict:
                         temp_id=ent.temp_id,
                         entity_type=ent.entity_type,
                         properties={"name": ent.name, **ent.properties},
+                        # "No entity with this name existed when I was diffed" —
+                        # re-checked at commit, so a doc ingested while an earlier
+                        # patch was parked requeues instead of creating duplicates.
+                        preconditions=[
+                            Precondition(kind="name_absent", subject=ent.name)
+                        ],
                         rationale=f"new entity '{ent.name}' ({ent.entity_type})",
                     ),
                     extraction=ent.extraction_confidence, resolution=0.5,
