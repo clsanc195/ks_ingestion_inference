@@ -41,6 +41,15 @@ _SYSTEM = """You extract knowledge-graph candidates from one unit of text.
 Return every entity and relation the text explicitly asserts — nothing implied or
 inferred beyond the text. Each item must include a verbatim supporting quote.
 
+Entities must be specific, nameable things: proper names, titles, organizations,
+places, products, dated events. NEVER output as an entity:
+- pronouns (he, she, it, they, this, ...)
+- unnamed references ("the city", "the film", "the company", "the band")
+If the text refers to something only by pronoun or generic reference, resolve it to
+the named entity when the name appears in this unit or its context; if it cannot be
+resolved to a name, OMIT that entity and every fact involving it. A dropped fact is
+better than a fact attached to nobody.
+
 Known entity types (guidance, not a closed list): {types}
 Known predicates (guidance, not a closed list): {predicates}"""
 
@@ -93,4 +102,40 @@ def extract_unit(
         for r in result.relations
         if r.subject in by_name and r.object in by_name
     ]
+    entities, relations = _drop_unnamed(entities, relations)
     return entities, relations
+
+
+_PRONOUNS = {
+    "he", "she", "it", "they", "them", "him", "her", "his", "hers", "its",
+    "their", "theirs", "this", "that", "these", "those", "who", "which",
+}
+_GENERIC_LEAD = ("the ", "a ", "an ", "this ", "that ", "these ", "those ",
+                 "his ", "her ", "their ", "its ")
+
+
+def _is_unnamed(name: str) -> bool:
+    """Pronouns and all-lowercase determiner phrases ('the city') are references,
+    not entities. Capitalized titles ('The Chronicles of Riddick') survive."""
+    stripped = name.strip()
+    if stripped.lower() in _PRONOUNS:
+        return True
+    low = stripped.lower()
+    return low == stripped and low.startswith(_GENERIC_LEAD)
+
+
+def _drop_unnamed(
+    entities: list[CandidateEntity], relations: list[CandidateRelation]
+) -> tuple[list[CandidateEntity], list[CandidateRelation]]:
+    """Safety net behind the prompt: no pronoun/generic-reference entities, and no
+    relations left dangling on them."""
+    dropped = {e.temp_id for e in entities if _is_unnamed(e.name)}
+    if dropped:
+        names = [e.name for e in entities if e.temp_id in dropped]
+        print(f"  dropped unnamed entities: {names}", flush=True)
+    kept_entities = [e for e in entities if e.temp_id not in dropped]
+    kept_relations = [
+        r for r in relations
+        if r.subject_temp_id not in dropped and r.object_temp_id not in dropped
+    ]
+    return kept_entities, kept_relations
