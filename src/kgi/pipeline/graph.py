@@ -105,10 +105,14 @@ def extract_node(state: IngestState) -> dict:
         graph.close()
 
     entities, relations = ground_truth_candidates(state["ndoc"])
-    for unit in state["units"]:
+    total = len(state["units"])
+    for i, unit in enumerate(state["units"], 1):
+        print(f"  extract {i}/{total}: {unit.text[:60]!r}", flush=True)
         ents, rels = extract_unit(unit, known_types, known_predicates)
         entities.extend(ents)
         relations.extend(rels)
+    print(f"  extracted {len(entities)} entities, {len(relations)} relations "
+          f"from {total} units", flush=True)
 
     # "New" = never approved: not in the seed ontology and not already in canonical
     # (canonical types passed review once — they don't need re-gating per mention).
