@@ -441,9 +441,14 @@ def commit_node(state: IngestState) -> dict:
     try:
         graph.ensure_constraints()
         report = commit_patch(graph, state["patch"])
-        status = "requeued" if report.requeued else "committed"
+        remaining = any(
+            r.route == RouteTarget.review and r.status == OpStatus.pending
+            for r in state["patch"].ops
+        )
+        status = ("pending" if remaining
+                  else "requeued" if report.requeued else "committed")
         staging.save_patch(state["patch"], status=status)
-        if not report.requeued:
+        if not report.requeued and not remaining:
             doc = state["ndoc"].doc
             graph.mark_document_committed(doc.doc_id, doc.content_hash, doc.source_uri)
         if report.committed:
@@ -495,6 +500,12 @@ def build_pipeline(checkpointer=None):
     g.add_edge("score_route", "stage")
     g.add_conditional_edges("stage", needs_review, {"review": "review", "commit": "commit"})
     g.add_edge("review", "commit")
-    g.add_edge("commit", END)
+    # Deferred ops loop back to the gate: commit what was decided, park again for
+    # the rest. A patch only closes when nothing review-routed is left pending.
+    g.add_conditional_edges(
+        "commit",
+        lambda state: "review" if needs_review(state) == "review" else "done",
+        {"review": "review", "done": END},
+    )
 
     return g.compile(checkpointer=checkpointer or MemorySaver())
