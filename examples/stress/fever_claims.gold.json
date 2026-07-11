@@ -1,0 +1,82 @@
+[
+ {
+  "claim": "Syracuse, New York, had a population of 145,170 according to the 2010 United States Census.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Lizzy Caplan starred in television show.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Hush (2016 film) was produced.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Britt Robertson is an actress.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Emma Watson is an actress.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Alan Metter directed Billboard Dad.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "There was a song performed on Britain's Got Talent called Rhythm Nation.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Riddick is in a film.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Fist of Legend is a remake of a film.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "The Residenztheater is where Hedda Gabler's world premiere took place.",
+  "label": "SUPPORTS"
+ },
+ {
+  "claim": "Jackie (2016 film) was directed by Peter Jackson.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "The CONCACAF Champions League is organized for the top baseball clubs.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "The University of Illinois at Chicago is privately funded.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "Global warming will result in the expansion of permafrost.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "Saxony is the tenth smallest German state.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "Mike Huckabee is an outspoken atheist.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "Swordfish (film) is incapable of being a film that is about an ex-convict.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "Match Point explores exclusively the theme of love.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "Fred Armisen is a frog.",
+  "label": "REFUTES"
+ },
+ {
+  "claim": "The Others (2001 film) lost Best Film.",
+  "label": "REFUTES"
+ }
+]
