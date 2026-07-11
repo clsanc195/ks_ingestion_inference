@@ -65,12 +65,16 @@ class EntityVectors(_Collection):
     def __init__(self) -> None:
         super().__init__(settings().qdrant_collection)
 
-    def upsert_entity(self, canonical_id: str, name: str, entity_type: str) -> None:
-        # Name-only embedding: type disagreement is exactly what the LLM tier judges,
-        # so it must not depress the blocking similarity.
+    def upsert_entity(self, canonical_id: str, name: str, entity_type: str,
+                      description: str = "") -> None:
+        # Embed name + description: same-name-different-thing pairs separate, and
+        # differently-worded aliases still land close. Description is a COPY here —
+        # its home is the Neo4j node; this index stays fully rebuildable.
+        text = f"{name} — {description}" if description else name
         self._upsert(
-            canonical_id, name,
-            {"canonical_id": canonical_id, "name": name, "entity_type": entity_type},
+            canonical_id, text,
+            {"canonical_id": canonical_id, "name": name,
+             "entity_type": entity_type, "description": description},
         )
 
     def nearest(self, name: str, limit: int = 5) -> list[dict]:

@@ -18,6 +18,9 @@ PROMPT_VERSION = "v1"
 class _ExtractedEntity(BaseModel):
     name: str
     entity_type: str = Field(description="Prefer a known type; propose a new one if none fits")
+    description: str = Field(
+        default="",
+        description="One sentence saying what this entity IS, from the text only")
     properties: dict = Field(default_factory=dict)
     quote: str = Field(description="Verbatim supporting text from the unit")
     confidence: float = Field(ge=0.0, le=1.0)
@@ -40,6 +43,9 @@ class _ExtractionResult(BaseModel):
 _SYSTEM = """You extract knowledge-graph candidates from one unit of text.
 Return every entity and relation the text explicitly asserts — nothing implied or
 inferred beyond the text. Each item must include a verbatim supporting quote.
+
+For every entity, include a one-sentence description of what it IS, drawn only
+from this text (e.g. "Spanish national film awards presented annually").
 
 Entities must be specific, nameable things: proper names, titles, organizations,
 places, products, dated events. NEVER output as an entity:
@@ -83,7 +89,8 @@ def extract_unit(
                 temp_id=temp_id,
                 name=e.name,
                 entity_type=e.entity_type,
-                properties=e.properties,
+                properties=({"description": e.description, **e.properties}
+                            if e.description else e.properties),
                 evidence=[_span(e.quote)],
                 extraction_confidence=e.confidence,
             )

@@ -1,10 +1,11 @@
 """Entity resolution cascade (L5): rules -> embedding cosine -> LLM pairwise.
 
 Open-domain (§7): the rules tier is exact-name only, so the embedding and LLM tiers
-carry most of the load. Thresholds were calibrated empirically on bge-small-en-v1.5:
-true aliases ("Acme Corp"/"Acme Corporation") score ~0.99, but *distinct* siblings
-("GripperOne"/"GripperTwo") score ~0.87 — auto-accepting at 0.85 would over-merge
-(§6.4), hence the wide ambiguous band handed to the LLM judge.
+carry most of the load. Vectors embed name + description; thresholds re-calibrated
+empirically on bge-small-en-v1.5 for that composition: true aliases span ~0.80-0.95
+while distinct-but-similar pairs (same-name people, sibling products, two Swiss
+cities) sit ~0.74-0.79. Separation is real but thin, so auto-accept fires only ≥0.90
+and a wide 0.60-0.90 band goes to the LLM judge — which sees the descriptions.
 
 Predicate paraphrase is handled the same way at a milder threshold: "is chief
 executive officer of" ≈ "is CEO of" (0.87) normalizes to the known predicate, while
@@ -19,8 +20,8 @@ from kgi.models import CandidateEntity
 from kgi.stores.neo4j import CanonicalGraph
 from kgi.stores.qdrant import EntityVectors, PredicateVectors
 
-EMBEDDING_ACCEPT = 0.93  # >= : same entity, no LLM needed
-EMBEDDING_REJECT = 0.70  # <  : new entity, no LLM needed
+EMBEDDING_ACCEPT = 0.90  # >= : same entity, no LLM needed (name+desc vectors)
+EMBEDDING_REJECT = 0.60  # <  : new entity, no LLM needed
 PREDICATE_NORMALIZE = 0.85  # >= : reuse the existing predicate string
 
 
@@ -55,6 +56,7 @@ def _llm_tier(entity: CandidateEntity, candidates: list[dict]) -> MatchResult:
     lines = [
         f"- canonical_id={c['canonical_id']!r} name={c['name']!r} "
         f"type={c['entity_type']!r} (cosine {c['score']:.2f})"
+        + (f"\n  description: {c['description']}" if c.get("description") else "")
         for c in candidates
     ]
     evidence = "; ".join(s.quote for s in entity.evidence[:3])
@@ -81,8 +83,11 @@ def resolve_entity(
     if match:
         return MatchResult(match["id"], 1.0, "rules")
 
-    # Tier 2 — embedding ANN blocking + cosine thresholds.
-    hits = vectors.nearest(entity.name, limit=5)
+    # Tier 2 — embedding ANN blocking + cosine thresholds. Query text mirrors
+    # the indexed text (name + description) so both sides speak the same language.
+    desc = entity.properties.get("description", "")
+    query_text = f"{entity.name} — {desc}" if desc else entity.name
+    hits = vectors.nearest(query_text, limit=5)
     if not hits:
         return MatchResult(None, 0.0, "none")
     top = hits[0]

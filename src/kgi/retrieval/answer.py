@@ -45,6 +45,7 @@ def answer(question: str, as_of: str | None = None) -> dict:
         fact_lines = "\n".join(
             f"[{f.edge_id}] {f.render()} (support {f.support}, "
             f"sources: {', '.join(s.split('/')[-1] for s in f.sources) or 'n/a'})"
+            + (f'\n    source text: "{f.quote}"' if f.quote else "")
             for f in facts
         )
         time_note = f"\nAnswer as of {as_of} — that is the reference time." if as_of else ""

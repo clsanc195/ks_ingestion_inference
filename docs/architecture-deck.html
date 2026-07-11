@@ -507,7 +507,7 @@
     <tr><td>Decomposition</td><td><code>kgi/decomposition</code></td><td>Splits parsed blocks into paragraph units; headings ride along as context. Sentence-level "atomic fact" splitting<sup><a href="#references">[4]</a></sup> is a planned swap-in behind the same interface.</td></tr>
     <tr><td>Extraction</td><td><code>kgi/extraction</code></td><td>One structured LLM call per paragraph → candidate entities and relations, each with a verbatim supporting quote and a confidence. The prompt lists type and predicate names already in the graph so repeat concepts keep the same names.</td></tr>
     <tr><td>Schema</td><td><code>kgi/schema</code></td><td>Small fixed set of base types (Agent, Event, Artifact…) plus types the LLM proposes<sup><a href="#references">[5]</a></sup>; never-seen types always require human review.</td></tr>
-    <tr><td>Entity dedup</td><td><code>kgi/resolution</code></td><td>Three tiers, cheap to expensive: exact name match → embedding similarity<sup><a href="#references">[2]</a></sup> (same if ≥0.93, new if &lt;0.70) → LLM-as-judge for the band between, prompted to prefer "different" over a wrong merge<sup><a href="#references">[7]</a></sup>. Merges keep a <code>SAME_AS</code> link so they can be undone.</td></tr>
+    <tr><td>Entity dedup</td><td><code>kgi/resolution</code></td><td>Three tiers, cheap to expensive: exact name match → embedding similarity<sup><a href="#references">[2]</a></sup> (same if ≥0.90, new if &lt;0.60) → LLM-as-judge for the band between, prompted to prefer "different" over a wrong merge<sup><a href="#references">[7]</a></sup>. Merges keep a <code>SAME_AS</code> link so they can be undone.</td></tr>
     <tr><td>Conflict detection</td><td><code>kgi/conflict</code></td><td>Fires when a new fact and an existing fact share an endpoint and predicate but disagree (new CEO, same company). An LLM-as-judge classifies: both can be true / value changed over time (old fact gets an end date automatically) / true contradiction (a human decides).</td></tr>
     <tr><td>Scoring · routing</td><td><code>kgi/confidence · kgi/routing</code></td><td>Weighted mix of extraction confidence, number of supporting sources<sup><a href="#references">[6]</a></sup>, dedup score, and type check → auto-approve / review / auto-reject. Some ops always go to review regardless of score.</td></tr>
     <tr><td>Review step</td><td><code>kgi/pipeline</code></td><td>LangGraph interrupt + Postgres checkpoint: the run pauses and survives restarts. Accept / edit / reject-with-note / defer per op; every decision stored with reviewer and timestamp. Resume from CLI or browser.</td></tr>
@@ -862,8 +862,8 @@ gen.update(output=result.model_dump(),           # → Langfuse: prompt,
   <div class="table-wrap"><table>
     <tr><th>Tier</th><th>Check</th><th>Cost</th><th>Settles</th></tr>
     <tr><td>tier 1</td><td>Exact name match in Neo4j (case-insensitive)</td><td>Free — one indexed lookup</td><td>Identical spellings</td></tr>
-    <tr><td>tier 2</td><td>Embed the name locally, cosine-search Qdrant. Same if ≥&nbsp;0.93, new if &lt;&nbsp;0.70</td><td>Cheap — milliseconds, no API</td><td>Obvious variants and obvious strangers</td></tr>
-    <tr><td>tier 3</td><td>LLM-as-judge, only for scores between 0.70 and 0.93</td><td>Expensive — one Claude call</td><td>The genuinely ambiguous few percent</td></tr>
+    <tr><td>tier 2</td><td>Embed name + description locally, cosine-search Qdrant. Same if ≥&nbsp;0.90, new if &lt;&nbsp;0.60</td><td>Cheap — milliseconds, no API</td><td>Obvious variants and obvious strangers</td></tr>
+    <tr><td>tier 3</td><td>LLM-as-judge (sees descriptions), for scores between 0.60 and 0.90</td><td>Expensive — one Claude call</td><td>The genuinely ambiguous few percent</td></tr>
   </table></div>
   <p>Here is how our three candidates move through those tiers:</p>
   <div class="ex"><span class="dim">── "Elena Vogel" ─────────────────────────────────────────────</span>
@@ -872,18 +872,18 @@ tier 1   exact-name lookup in Neo4j      → found (known from an earlier docume
 
 <span class="dim">── "Basel" ───────────────────────────────────────────────────</span>
 tier 1   exact-name lookup in Neo4j      → not found
-tier 2   embed the name, search Qdrant   → closest existing name scores 0.41
-         0.41 is below the 0.70 floor    → nothing similar exists in the graph
+tier 2   embed name + description, search Qdrant → closest scores 0.41
+         0.41 is below the 0.60 floor    → nothing similar exists in the graph
 <span class="ok">result   new entity → create_node op</span>
 
 <span class="dim">── "Acme Corp" ───────────────────────────────────────────────</span>
 tier 1   exact-name lookup in Neo4j      → not found ("Acme Corporation" ≠ exact)
-tier 2   embed the name, search Qdrant   → "Acme Corporation" scores 0.99
-         0.99 is above the 0.93 bar      → confidently the same entity
+tier 2   embed name + description, search Qdrant → "Acme Corporation" scores 0.94
+         0.94 is above the 0.90 bar      → confidently the same entity
 <span class="ok">result   merge_into op — keeps an undoable SAME_AS link</span>
 
 <span class="dim">── tier 3 (not triggered by this document) ───────────────────
-a score between 0.70 and 0.93 is too close to call either way;
+a score between 0.60 and 0.90 is too close to call either way;
 the LLM-as-judge decides, instructed to prefer "different"</span></div>
   <div class="op neo"><div class="op-h"><span class="op-tag">NEO4J</span><span class="op-t">tier 1 · stores/neo4j.py · find_by_name()</span></div><pre><code class="lang-cypher">MATCH (n:Canonical)
 WHERE toLower(n.name) = toLower($name)
@@ -901,8 +901,8 @@ corrupts the graph and is much harder to detect than a duplicate.</code></pre></
   <div class="op code"><div class="op-h"><span class="op-tag">CODE</span><span class="op-t">src/kgi/resolution/cascade.py · resolve_entity() — the cascade</span></div><pre><code class="lang-python">match = graph.find_by_name(entity.name)          # tier 1: exact
 if match: return MatchResult(match["id"], 1.0, "rules")
 hits = vectors.nearest(entity.name, limit=5)      # tier 2: embeddings
-if hits[0]["score"] >= 0.93:  return MatchResult(hits[0]["canonical_id"], ...)
-if hits[0]["score"] &lt;  0.70:  return MatchResult(None, ...)   # new entity
+if hits[0]["score"] >= 0.90:  return MatchResult(hits[0]["canonical_id"], ...)
+if hits[0]["score"] &lt;  0.60:  return MatchResult(None, ...)   # new entity
 return _llm_tier(entity, band)                    # tier 3: the judge</code></pre></div>
   <ul class="tight">
     <li><strong>The bands are measured, not guessed.</strong> On real pairs,

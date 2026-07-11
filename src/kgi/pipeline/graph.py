@@ -270,6 +270,8 @@ def resolve_node(state: IngestState) -> dict:
             return (graph.get_node(ref.canonical_id) or {}).get("name", "?")
 
         for rel in relations:
+            if rel.evidence and "quote" not in rel.properties:
+                rel.properties["quote"] = rel.evidence[0].quote[:300]
             subj, obj = refs[rel.subject_temp_id], refs[rel.object_temp_id]
             depends = [dep_of[t] for t in (rel.subject_temp_id, rel.object_temp_id)
                        if t in dep_of]
@@ -461,7 +463,8 @@ def commit_node(state: IngestState) -> dict:
                 for node in graph.nodes_written_by_patch(state["patch"].patch_id):
                     if node.get("name"):
                         entity_vectors.upsert_entity(
-                            node["id"], node["name"], node.get("entity_type", "")
+                            node["id"], node["name"], node.get("entity_type", ""),
+                            node.get("description", ""),
                         )
                 for predicate in graph.predicates_written_by_patch(state["patch"].patch_id):
                     predicate_vectors.upsert_predicate(predicate)
