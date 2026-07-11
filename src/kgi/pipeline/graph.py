@@ -58,27 +58,36 @@ def parse_node(state: IngestState) -> dict:
     from kgi.ingestion import get_parser
     from kgi.ingestion.base import register_document
     from kgi.models import Modality
-    from kgi.stores.neo4j import CanonicalGraph
+    from kgi.stores.neo4j import CanonicalGraph, StagingStore
 
     path = Path(state["source_path"])
     modality = Modality(state["modality"])
     doc = register_document(path, modality)
 
-    graph = CanonicalGraph()
+    graph, staging = CanonicalGraph(), StagingStore()
     try:
         duplicate = graph.document_committed(doc.content_hash)
+        # Intake lock: the same document parked at the gate must not be staged
+        # twice — two pending patches for one doc would race at commit.
+        in_flight = None if duplicate else staging.pending_patch_for_doc(doc.doc_id)
     finally:
         graph.close()
-    if duplicate:
+        staging.close()
+    if duplicate or in_flight:
         return {
             "ndoc": NormalizedDocument(doc=doc, blocks=[]),
-            "commit_report": {"duplicate_document": doc.doc_id},
+            "commit_report": (
+                {"duplicate_document": doc.doc_id} if duplicate
+                else {"document_in_flight": in_flight}
+            ),
         }
     return {"ndoc": get_parser(modality).parse(doc, path)}
 
 
 def is_duplicate(state: IngestState) -> str:
-    return "skip" if "duplicate_document" in state.get("commit_report", {}) else "continue"
+    report = state.get("commit_report", {})
+    skip = "duplicate_document" in report or "document_in_flight" in report
+    return "skip" if skip else "continue"
 
 
 def decompose_node(state: IngestState) -> dict:

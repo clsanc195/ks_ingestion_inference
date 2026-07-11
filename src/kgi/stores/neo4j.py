@@ -316,6 +316,18 @@ class StagingStore(_Base):
             s.run("MATCH (p:Patch {id: $id}) SET p.status = $status",
                   id=patch_id, status=status)
 
+    def pending_patch_for_doc(self, doc_id: str) -> str | None:
+        """Intake lock: is this document already staged and awaiting review?
+        doc_id is content-hash-derived, so this catches byte-identical re-ingests
+        while the first run is still parked at the gate."""
+        with self.session() as s:
+            rec = s.run(
+                "MATCH (p:Patch {doc_id: $doc_id, status: 'pending'}) "
+                "RETURN p.id LIMIT 1",
+                doc_id=doc_id,
+            ).single()
+            return rec["p.id"] if rec else None
+
     def pending_patches(self) -> list[Patch]:
         with self.session() as s:
             result = s.run(

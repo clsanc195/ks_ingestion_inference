@@ -30,6 +30,11 @@ def _print_report(result: dict) -> None:
         console.print(f"[yellow]duplicate document — already ingested "
                       f"({report['duplicate_document']}), nothing to do[/yellow]")
         return
+    if "document_in_flight" in report:
+        console.print(f"[yellow]document already staged and awaiting review "
+                      f"(patch {report['document_in_flight']}) — decide it with "
+                      f"'kgi review' or the board before re-ingesting[/yellow]")
+        return
     console.print(
         f"[green]committed {len(report.get('committed', []))}[/green] · "
         f"requeued {len(report.get('requeued', []))} · "
