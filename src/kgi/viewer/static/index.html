@@ -84,6 +84,41 @@
   .legend .row { display: flex; align-items: center; gap: 7px; }
   .legend .dot { width: 9px; height: 9px; border-radius: 50%; }
   .legend .line { width: 16px; border-top: 2px dashed var(--baseline); }
+  #board { display: none; flex: 1; overflow-y: auto; padding: 18px 26px 90px; background: var(--surface-1); }
+  .board-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .board-controls .muted { font-size: 12px; }
+  select#groupBy { font: 12.5px ui-monospace, Menlo, monospace; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--page); color: var(--ink-1); }
+  details.grp { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--page); }
+  details.grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; font-size: 13.5px; font-weight: 600; }
+  details.grp > summary::before { content: "▸"; color: var(--ink-muted); font-size: 11px; }
+  details.grp[open] > summary::before { content: "▾"; }
+  .grp-count { font: 11px ui-monospace, Menlo, monospace; color: var(--ink-muted); font-weight: 400; }
+  .grp-flag { font: 600 10px ui-monospace, Menlo, monospace; color: var(--critical); }
+  .grp-actions { margin-left: auto; display: flex; gap: 6px; }
+  .grp-actions button, .oprow .act button {
+    font: 11.5px ui-monospace, Menlo, monospace; padding: 3px 10px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); color: var(--ink-1);
+  }
+  .oprow { display: flex; gap: 10px; align-items: baseline; padding: 7px 14px 7px 30px;
+    border-top: 1px solid var(--border); font-size: 13px; flex-wrap: wrap; }
+  .oprow .kind { font: 10px ui-monospace, Menlo, monospace; color: var(--ink-muted); min-width: 86px; text-transform: uppercase; }
+  .oprow .txt { flex: 1 1 320px; }
+  .oprow .conf { font: 11px ui-monospace, Menlo, monospace; color: var(--ink-muted); }
+  .oprow .why { flex-basis: 100%; font-size: 11.5px; color: var(--ink-muted); padding-left: 96px; }
+  .oprow.flag-conflict .txt { color: var(--critical); }
+  .oprow .act { display: flex; gap: 5px; }
+  button.sel-a { border-color: var(--good) !important; color: var(--good) !important; font-weight: 700; }
+  button.sel-r { border-color: var(--critical) !important; color: var(--critical) !important; font-weight: 700; }
+  .oprow input.note { font: 11.5px ui-monospace, Menlo, monospace; flex: 1; padding: 3px 8px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--ink-1); }
+  #submitbar { position: sticky; bottom: 0; display: none; gap: 14px; align-items: center;
+    padding: 12px 26px; background: var(--surface-1); border-top: 1px solid var(--grid); }
+  #submitbar .tally { font: 12px ui-monospace, Menlo, monospace; color: var(--ink-2); }
+  #submitbar .tally b.a { color: var(--good); } #submitbar .tally b.r { color: var(--critical); }
+  #submitbar button.go { font: 600 13px system-ui, sans-serif; padding: 8px 18px; cursor: pointer;
+    border: 1px solid var(--s1); border-radius: 999px; background: var(--s1); color: #fff; }
   #tooltip {
     position: absolute; pointer-events: none; display: none; max-width: 320px;
     padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
@@ -164,6 +199,7 @@
   <button class="chip" id="themeBtn">theme</button>
 </header>
 <main>
+  <div id="board"></div>
   <div id="canvas-wrap">
     <svg id="svg"><g id="view"><g id="edges"></g><g id="nodes"></g></g></svg>
     <div class="legend" id="legend"></div>
@@ -171,6 +207,11 @@
   </div>
   <aside id="panel"></aside>
 </main>
+<div id="submitbar">
+  <span class="tally" id="tally"></span>
+  <button class="go" id="submitAll">Submit decisions</button>
+  <span class="muted" style="font-size:11.5px">undecided ops are deferred</span>
+</div>
 <script>
 const PALETTE = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -399,76 +440,158 @@ el('askBtn').addEventListener('click', doAsk);
 el('clearBtn').addEventListener('click', () => { clearHighlight(); resetPanel(); });
 el('q').addEventListener('keydown', ev => { if (ev.key === 'Enter') (ev.shiftKey ? doFind() : doAsk()); });
 
-// --- review queue with decisions ---
-const pendingDecisions = {};  // patch_id -> op_id -> {action, note}
+// --- review board: full-width, grouped, bulk actions ---
+const decisions = {};   // op_id -> {action, note, patch}
+let boardData = null;
 
-async function showQueue() {
-  const d = await fetch('/api/pending').then(r => r.json());
-  el('panel').innerHTML = `<h2>Review queue</h2>` + (d.patches.length ? d.patches.map(p => `
-    <h3>patch <code>${esc(p.patch_id)}</code> · ${esc(p.created_at.slice(0,16).replace('T',' '))}</h3>
-    <ul class="plain">${p.ops.map(o => `
-      <li class="pending-op" data-patch="${esc(p.patch_id)}" data-op="${esc(o.op_id)}">
-        <b>${esc(o.kind)}</b> <span class="conf">conf ${(+o.confidence).toFixed(2)}</span>
-        <div class="muted">${esc(o.rationale)}</div>
-        <div class="actions">
-          <button data-act="accept">accept</button>
-          <button data-act="reject">reject</button>
-          <input class="note" placeholder="note (why)" style="display:none">
-        </div>
-      </li>`).join('')}
-    </ul>
-    <div class="submit-row">
-      <button data-submit="${esc(p.patch_id)}">submit decisions</button>
-      <span class="muted">undecided ops are deferred</span>
-    </div>
-    <div class="report" id="report-${esc(p.patch_id)}"></div>`
-  ).join('') : '<p class="empty">Queue is empty — every proposed fact has been adjudicated.</p>');
+function setDecision(opId, patchId, action) {
+  if (action === null) delete decisions[opId];
+  else decisions[opId] = { action, note: decisions[opId]?.note || '', patch: patchId };
+  renderTally();
+  refreshRowStates();
+}
+function renderTally() {
+  const vals = Object.values(decisions);
+  const a = vals.filter(v => v.action === 'accept').length;
+  const r = vals.filter(v => v.action === 'reject').length;
+  const total = boardData ? boardData.patches.reduce((n, p) => n + p.ops.length, 0) : 0;
+  el('tally').innerHTML = `<b class="a">${a} accept</b> · <b class="r">${r} reject</b> · ${total - a - r} deferred`;
+}
+function refreshRowStates() {
+  document.querySelectorAll('.oprow').forEach(row => {
+    const dec = decisions[row.dataset.op];
+    row.querySelector('[data-act="accept"]').className = dec?.action === 'accept' ? 'sel-a' : '';
+    row.querySelector('[data-act="reject"]').className = dec?.action === 'reject' ? 'sel-r' : '';
+    row.querySelector('input.note').style.display = dec?.action === 'reject' ? '' : 'none';
+  });
 }
 
-el('panel').addEventListener('click', async ev => {
-  const actBtn = ev.target.closest('button[data-act]');
-  if (actBtn) {
-    const row = actBtn.closest('.pending-op');
-    const {patch, op} = row.dataset;
-    const act = actBtn.dataset.act;
-    pendingDecisions[patch] ??= {};
-    pendingDecisions[patch][op] = {action: act, note: ''};
-    row.querySelectorAll('button[data-act]').forEach(b =>
-      b.className = b.dataset.act === act ? `sel-${act}` : '');
-    row.querySelector('input.note').style.display = act === 'reject' ? '' : 'none';
+function groupOps(ops, mode) {
+  const key = o => mode === 'kind' ? o.kind
+             : mode === 'flag' ? (o.flag ? '⚠ conflicts' : 'unflagged')
+             : o.group;
+  const m = new Map();
+  ops.forEach(o => { const k = key(o) || '—'; if (!m.has(k)) m.set(k, []); m.get(k).push(o); });
+  return [...m.entries()].sort((x, y) =>
+    (y[1].some(o => o.flag) - x[1].some(o => o.flag)) || y[1].length - x[1].length);
+}
+
+async function showQueue() {
+  boardData = await fetch('/api/pending').then(r => r.json());
+  el('canvas-wrap').style.display = 'none';
+  el('board').style.display = 'block';
+  el('submitbar').style.display = 'flex';
+  renderBoard();
+  renderTally();
+}
+function hideQueue() {
+  el('board').style.display = 'none';
+  el('submitbar').style.display = 'none';
+  el('canvas-wrap').style.display = '';
+}
+
+function renderBoard() {
+  const mode = document.getElementById('groupBy')?.value || 'entity';
+  if (!boardData.patches.length) {
+    el('board').innerHTML = '<h2>Review queue</h2><p class="empty">Queue is empty — every proposed fact has been adjudicated.</p>';
     return;
   }
-  const submitBtn = ev.target.closest('button[data-submit]');
-  if (submitBtn) {
-    const patchId = submitBtn.dataset.submit;
-    const decisions = pendingDecisions[patchId] || {};
-    document.querySelectorAll(`.pending-op[data-patch="${patchId}"]`).forEach(row => {
-      const note = row.querySelector('input.note').value;
-      if (decisions[row.dataset.op]) decisions[row.dataset.op].note = note;
-    });
-    if (!Object.keys(decisions).length) return;
-    submitBtn.disabled = true; submitBtn.textContent = 'committing…';
-    const reviewer = localStorage.getItem('kgi-reviewer')
-      || prompt('reviewer name for provenance', 'web') || 'web';
-    localStorage.setItem('kgi-reviewer', reviewer);
-    const report = await fetch(`/api/review/${patchId}`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({reviewer, decisions}),
-    }).then(r => r.json());
-    el(`report-${patchId}`).innerHTML =
-      `<b style="color:var(--good)">committed ${report.committed?.length ?? 0}</b> · ` +
-      `requeued ${report.requeued?.length ?? 0} · blocked ${report.blocked?.length ?? 0} · ` +
-      `skipped ${report.skipped?.length ?? 0}`;
-    delete pendingDecisions[patchId];
-    await load();            // graph + tiles reflect the commit immediately
-    setTimeout(showQueue, 900);
+  el('board').innerHTML = `
+    <div class="board-controls">
+      <h2 style="font-size:16px;margin-right:8px">Review queue</h2>
+      <span class="muted">group by</span>
+      <select id="groupBy">
+        <option value="entity"${mode === 'entity' ? ' selected' : ''}>entity</option>
+        <option value="kind"${mode === 'kind' ? ' selected' : ''}>op type</option>
+        <option value="flag"${mode === 'flag' ? ' selected' : ''}>flagged</option>
+      </select>
+      <button class="chip" id="acceptAll">✓ accept all</button>
+      <button class="chip" id="acceptSafe">✓ accept all except ⚠</button>
+      <button class="chip" id="clearAll">reset</button>
+    </div>` +
+    boardData.patches.map(p => `
+      <h3 style="font:600 11px ui-monospace,Menlo,monospace;color:var(--ink-muted);letter-spacing:.08em;margin:14px 0 8px">
+        PATCH <code>${esc(p.patch_id)}</code> · ${p.ops.length} OPS · ${esc(p.created_at.slice(0, 16).replace('T', ' '))}</h3>` +
+      groupOps(p.ops, mode).map(([g, ops]) => `
+        <details class="grp"${ops.some(o => o.flag) || ops.length <= 6 ? ' open' : ''}>
+          <summary>${esc(g)} <span class="grp-count">${ops.length} op${ops.length > 1 ? 's' : ''}</span>
+            ${ops.some(o => o.flag) ? '<span class="grp-flag">⚠ has conflicts</span>' : ''}
+            <span class="grp-actions">
+              <button data-grp-act="accept">✓ all</button>
+              <button data-grp-act="reject">✗ all</button>
+            </span></summary>
+          ${ops.map(o => `
+            <div class="oprow flag-${o.flag || 'none'}" data-op="${esc(o.op_id)}" data-patch="${esc(p.patch_id)}">
+              <span class="kind">${esc(o.kind)}</span>
+              <span class="txt">${esc(o.text)}</span>
+              <span class="conf">${o.flag ? '⚠ forced' : (+o.confidence).toFixed(2)}</span>
+              <span class="act">
+                <button data-act="accept">✓</button>
+                <button data-act="reject">✗</button>
+              </span>
+              ${o.rationale && o.rationale !== o.text ? `<span class="why">${esc(o.rationale)}</span>` : ''}
+              <input class="note" placeholder="note (why rejected)" style="display:none">
+            </div>`).join('')}
+        </details>`).join('')
+    ).join('');
+  refreshRowStates();
+
+  el('groupBy').addEventListener('change', renderBoard);
+  el('acceptAll').addEventListener('click', () =>
+    boardData.patches.forEach(p => p.ops.forEach(o => setDecision(o.op_id, p.patch_id, 'accept'))));
+  el('acceptSafe').addEventListener('click', () =>
+    boardData.patches.forEach(p => p.ops.forEach(o =>
+      { if (!o.flag) setDecision(o.op_id, p.patch_id, 'accept'); })));
+  el('clearAll').addEventListener('click', () => {
+    Object.keys(decisions).forEach(k => delete decisions[k]); renderTally(); refreshRowStates();
+  });
+}
+
+el('board').addEventListener('click', ev => {
+  const gbtn = ev.target.closest('button[data-grp-act]');
+  if (gbtn) {
+    ev.preventDefault(); ev.stopPropagation();
+    const det = gbtn.closest('details');
+    det.querySelectorAll('.oprow').forEach(row =>
+      setDecision(row.dataset.op, row.dataset.patch, gbtn.dataset.grpAct));
+    return;
+  }
+  const abtn = ev.target.closest('button[data-act]');
+  if (abtn) {
+    const row = abtn.closest('.oprow');
+    const cur = decisions[row.dataset.op]?.action;
+    setDecision(row.dataset.op, row.dataset.patch, cur === abtn.dataset.act ? null : abtn.dataset.act);
+  }
+});
+el('board').addEventListener('input', ev => {
+  const inp = ev.target.closest('input.note');
+  if (inp) {
+    const row = inp.closest('.oprow');
+    if (decisions[row.dataset.op]) decisions[row.dataset.op].note = inp.value;
   }
 });
 
-el('queueBtn').addEventListener('click', () => {
-  queueMode = !queueMode;
-  el('queueBtn').setAttribute('aria-pressed', String(queueMode));
-  if (queueMode) showQueue(); else resetPanel();
+el('submitAll').addEventListener('click', async () => {
+  const byPatch = {};
+  for (const [opId, dec] of Object.entries(decisions)) {
+    (byPatch[dec.patch] ??= {})[opId] = { action: dec.action, note: dec.note };
+  }
+  if (!Object.keys(byPatch).length) return;
+  const reviewer = localStorage.getItem('kgi-reviewer')
+    || prompt('reviewer name for provenance', 'web') || 'web';
+  localStorage.setItem('kgi-reviewer', reviewer);
+  el('submitAll').disabled = true; el('submitAll').textContent = 'committing…';
+  for (const [patchId, decs] of Object.entries(byPatch)) {
+    const report = await fetch(`/api/review/${patchId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewer, decisions: decs }),
+    }).then(r => r.json());
+    console.log(patchId, report);
+  }
+  Object.keys(decisions).forEach(k => delete decisions[k]);
+  el('submitAll').disabled = false; el('submitAll').textContent = 'Submit decisions';
+  await load();
+  showQueue();
 });
 
 // --- node detail panel ---
@@ -503,6 +626,13 @@ async function select(id) {
     }).join('') || '<li class="empty">none</li>'}
     </ul>`;
 }
+
+el('queueBtn').addEventListener('click', () => {
+  queueMode = !queueMode;
+  el('queueBtn').setAttribute('aria-pressed', String(queueMode));
+  if (queueMode) showQueue();
+  else { hideQueue(); resetPanel(); }
+});
 
 // --- theme toggle ---
 el('themeBtn').addEventListener('click', () => {

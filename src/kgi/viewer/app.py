@@ -100,27 +100,92 @@ def create_app() -> FastAPI:
 
     @app.get("/api/pending")
     def pending():
-        """The review queue: what inference proposed but no human has admitted yet."""
+        """The review queue, enriched for the review board: each op carries a
+        human-readable fact text, a primary-entity group label, and a conflict flag."""
         out = []
         for patch in staging.pending_patches():
-            ops = [
-                {
-                    "op_id": r.op.op_id,
-                    "kind": r.op.op,
-                    "confidence": r.op.confidence,
-                    "rationale": r.op.rationale,
-                }
-                for r in patch.ops
-                if r.route == RouteTarget.review and r.status == OpStatus.pending
-            ]
-            out.append(
-                {
-                    "patch_id": patch.patch_id,
-                    "doc_id": patch.doc_id,
-                    "created_at": patch.created_at.isoformat(),
-                    "ops": ops,
-                }
-            )
+            temp_names: dict[str, str] = {}
+            canonical_ids: set[str] = set()
+            edge_ids: set[str] = set()
+            for r in patch.ops:
+                op = r.op
+                if op.op == "create_node":
+                    temp_names[op.temp_id] = op.properties.get("name", op.temp_id)
+                elif op.op == "merge_into":
+                    canonical_ids.add(op.canonical_id)
+                elif op.op in ("assert_edge",):
+                    for ref in (op.subject, op.object):
+                        if ref.canonical_id:
+                            canonical_ids.add(ref.canonical_id)
+                elif op.op in ("invalidate_edge", "reinforce_edge"):
+                    edge_ids.add(op.canonical_edge_id)
+                elif op.op == "update_node_props":
+                    canonical_ids.add(op.canonical_id)
+
+            canon_names: dict[str, str] = {}
+            edge_info: dict[str, dict] = {}
+            with graph.session() as s:
+                if canonical_ids:
+                    for rec in s.run(
+                        "MATCH (n:Canonical) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name",
+                        ids=list(canonical_ids),
+                    ):
+                        canon_names[rec["id"]] = rec["name"]
+                if edge_ids:
+                    for rec in s.run(
+                        "MATCH (a:Canonical)-[r:REL]->(b:Canonical) WHERE r.id IN $ids "
+                        "RETURN r.id AS id, a.name AS s, r.predicate AS p, b.name AS o",
+                        ids=list(edge_ids),
+                    ):
+                        edge_info[rec["id"]] = dict(rec)
+
+            def ref_name(ref) -> str:
+                if ref.canonical_id:
+                    return canon_names.get(ref.canonical_id, ref.canonical_id)
+                return temp_names.get(ref.temp_id, ref.temp_id or "?")
+
+            ops = []
+            for r in patch.ops:
+                if not (r.route == RouteTarget.review and r.status == OpStatus.pending):
+                    continue
+                op = r.op
+                if op.op == "create_node":
+                    group = op.properties.get("name", op.temp_id)
+                    text = f"new entity: {group} ({op.entity_type})"
+                elif op.op == "merge_into":
+                    group = canon_names.get(op.canonical_id, op.canonical_id)
+                    text = f"merge {temp_names.get(op.temp_id, op.temp_id)} → {group} ({op.match_method} {op.match_score:.2f})"
+                elif op.op == "assert_edge":
+                    group = ref_name(op.subject)
+                    text = f"({group}) —{op.predicate}→ ({ref_name(op.object)})"
+                    if op.valid_from:
+                        text += f" · from {op.valid_from}"
+                elif op.op in ("invalidate_edge", "reinforce_edge"):
+                    e = edge_info.get(op.canonical_edge_id, {})
+                    group = e.get("s", "?")
+                    verb = "close" if op.op == "invalidate_edge" else "reinforce"
+                    text = f"{verb}: ({e.get('s','?')}) —{e.get('p','?')}→ ({e.get('o','?')})"
+                elif op.op == "update_node_props":
+                    group = canon_names.get(op.canonical_id, op.canonical_id)
+                    text = f"update {group}: {op.properties}"
+                else:
+                    group, text = "other", op.op
+                ops.append({
+                    "op_id": op.op_id,
+                    "kind": op.op,
+                    "confidence": op.confidence,
+                    "rationale": op.rationale,
+                    "group": group,
+                    "text": text,
+                    "flag": "conflict" if ("CONFLICT" in op.rationale.upper()
+                                           or "contested" in op.rationale) else "",
+                })
+            out.append({
+                "patch_id": patch.patch_id,
+                "doc_id": patch.doc_id,
+                "created_at": patch.created_at.isoformat(),
+                "ops": ops,
+            })
         return {"patches": out}
 
     @app.get("/api/search")
