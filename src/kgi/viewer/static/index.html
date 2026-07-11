@@ -294,34 +294,47 @@ function draw() {
   }).join('');
 }
 
-// --- force simulation ---
+// --- force simulation: settles, then stays slightly alive (Obsidian-style) ---
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const AMBIENT = REDUCED_MOTION ? 0 : 0.045;   // energy floor — the "alive" part
 function startSim() {
   let alpha = 1;
   const W = el('svg').clientWidth, H = el('svg').clientHeight;
+  nodes.forEach((n, i) => { if (n.ph === undefined) n.ph = i * 2.399 + (i % 7) * 0.61; });
   function tick() {
+    if (el('canvas-wrap').style.display === 'none') {   // board open: idle cheaply
+      setTimeout(() => requestAnimationFrame(tick), 400);
+      return;
+    }
+    const t = performance.now() / 1000;
     for (const n of nodes) { n.vx *= 0.85; n.vy *= 0.85; }
-    for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++) {
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i], b = nodes[j];
       let dx = b.x - a.x, dy = b.y - a.y;
-      let d2 = dx*dx + dy*dy || 1, d = Math.sqrt(d2);
+      let d2 = dx * dx + dy * dy || 1, d = Math.sqrt(d2);
       const f = Math.min(2600 / d2, 8) * alpha;
       dx /= d; dy /= d;
-      a.vx -= dx*f; a.vy -= dy*f; b.vx += dx*f; b.vy += dy*f;
+      a.vx -= dx * f; a.vy -= dy * f; b.vx += dx * f; b.vy += dy * f;
     }
     for (const e of edges) {
       let dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
-      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
       const f = (d - 120) * 0.02 * alpha;
       dx /= d; dy /= d;
-      e.a.vx += dx*f; e.a.vy += dy*f; e.b.vx -= dx*f; e.b.vy -= dy*f;
+      e.a.vx += dx * f; e.a.vy += dy * f; e.b.vx -= dx * f; e.b.vy -= dy * f;
     }
     for (const n of nodes) {
-      n.vx += (W/2 - n.x) * 0.002 * alpha; n.vy += (H/2 - n.y) * 0.002 * alpha;
+      n.vx += (W / 2 - n.x) * 0.002 * alpha; n.vy += (H / 2 - n.y) * 0.002 * alpha;
+      if (alpha < 0.2 && AMBIENT) {          // gentle wander once mostly settled
+        n.vx += Math.sin(t * 0.5 + n.ph) * 0.045;
+        n.vy += Math.cos(t * 0.43 + n.ph * 1.7) * 0.045;
+      }
       if (n !== dragNode) { n.x += n.vx; n.y += n.vy; }
     }
     draw();
-    alpha *= 0.985;
-    if (alpha > 0.02 || dragNode) requestAnimationFrame(tick); else sim = null;
+    alpha = Math.max(alpha * 0.985, AMBIENT);
+    if (alpha > 0.02 || dragNode || AMBIENT) requestAnimationFrame(tick);
+    else sim = null;
   }
   if (!sim) { sim = true; requestAnimationFrame(tick); }
 }
