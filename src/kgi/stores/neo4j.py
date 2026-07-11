@@ -159,6 +159,30 @@ class CanonicalGraph(_Base):
             )
             return [dict(rec["n"]) for rec in result]
 
+    def edges_written_by_patch(self, patch_id: str) -> list[dict]:
+        """Full edge rows a committed patch wrote — indexed into the fact vectors."""
+        with self.session() as s:
+            return s.run(
+                "MATCH (a:AppliedOp {patch_id: $pid}) WHERE a.edge_id IS NOT NULL "
+                "MATCH (su:Canonical)-[r:REL {id: a.edge_id}]->(ob:Canonical) "
+                "RETURN DISTINCT r.id AS edge_id, r.predicate AS predicate, "
+                "coalesce(r.quote, '') AS quote, r.valid_from AS valid_from, "
+                "r.valid_to AS valid_to, su.id AS subject_id, su.name AS subject, "
+                "ob.id AS object_id, ob.name AS object",
+                pid=patch_id,
+            ).data()
+
+    def all_edges(self) -> list[dict]:
+        """Every edge with endpoint info — the vector-rebuild source of truth."""
+        with self.session() as s:
+            return s.run(
+                "MATCH (su:Canonical)-[r:REL]->(ob:Canonical) "
+                "RETURN r.id AS edge_id, r.predicate AS predicate, "
+                "coalesce(r.quote, '') AS quote, r.valid_from AS valid_from, "
+                "r.valid_to AS valid_to, su.id AS subject_id, su.name AS subject, "
+                "ob.id AS object_id, ob.name AS object"
+            ).data()
+
     def predicates_written_by_patch(self, patch_id: str) -> list[str]:
         with self.session() as s:
             result = s.run(

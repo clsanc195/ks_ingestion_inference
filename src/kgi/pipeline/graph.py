@@ -456,9 +456,12 @@ def commit_node(state: IngestState) -> dict:
         if report.committed:
             # Index only what survived the gate: committed entities + predicates
             # become searchable for the next document's resolution cascade.
-            from kgi.stores.qdrant import EntityVectors, PredicateVectors
+            from kgi.stores.qdrant import (EntityVectors, FactVectors,
+                                           PredicateVectors, fact_text)
 
-            entity_vectors, predicate_vectors = EntityVectors(), PredicateVectors()
+            entity_vectors = EntityVectors()
+            predicate_vectors = PredicateVectors()
+            fact_vectors = FactVectors()
             try:
                 for node in graph.nodes_written_by_patch(state["patch"].patch_id):
                     if node.get("name"):
@@ -468,9 +471,18 @@ def commit_node(state: IngestState) -> dict:
                         )
                 for predicate in graph.predicates_written_by_patch(state["patch"].patch_id):
                     predicate_vectors.upsert_predicate(predicate)
+                for e in graph.edges_written_by_patch(state["patch"].patch_id):
+                    fact_vectors.upsert_fact(
+                        e["edge_id"],
+                        fact_text(e["subject"], e["predicate"], e["object"],
+                                  e["valid_from"], e["valid_to"], e["quote"]),
+                        e["subject_id"], e["object_id"], e["predicate"],
+                        e["valid_from"], e["valid_to"],
+                    )
             finally:
                 entity_vectors.close()
                 predicate_vectors.close()
+                fact_vectors.close()
     finally:
         graph.close()
         staging.close()

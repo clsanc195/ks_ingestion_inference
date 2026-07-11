@@ -18,7 +18,7 @@ graph.close()
 print("neo4j wiped (constraints kept)")
 
 qc = QdrantClient(url=settings().qdrant_url)
-for coll in (settings().qdrant_collection, "kgi-predicates"):
+for coll in (settings().qdrant_collection, "kgi-predicates", "kgi-facts"):
     if qc.collection_exists(coll):
         qc.delete_collection(coll)
 qc.close()

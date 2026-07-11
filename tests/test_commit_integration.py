@@ -34,8 +34,14 @@ def _connect() -> CanonicalGraph | None:
         return None
 
 
+import os
+
 _graph = _connect()
-pytestmark = pytest.mark.skipif(_graph is None, reason="Neo4j not reachable")
+pytestmark = pytest.mark.skipif(
+    _graph is None or os.environ.get("KGI_TEST_ALLOW_WIPE") != "1",
+    reason="Neo4j not reachable, or KGI_TEST_ALLOW_WIPE=1 not set — "
+           "these tests WIPE the database they point at",
+)
 
 
 @pytest.fixture()

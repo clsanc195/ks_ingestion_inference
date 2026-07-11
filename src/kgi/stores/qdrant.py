@@ -82,6 +82,39 @@ class EntityVectors(_Collection):
         return self._nearest(name, limit)
 
 
+def fact_text(subject: str, predicate: str, obj: str,
+              valid_from: str | None = None, valid_to: str | None = None,
+              quote: str = "") -> str:
+    """The text a fact embeds as — rendering + window + verbatim quote."""
+    t = f"({subject}) —{predicate}→ ({obj})"
+    if valid_from or valid_to:
+        t += f" · {valid_from or '…'}→{valid_to or 'now'}"
+    if quote:
+        t += f' — "{quote}"'
+    return t
+
+
+class FactVectors(_Collection):
+    """One point per committed edge — the Facts door (proposition-level index,
+    per Dense X Retrieval). Payload links back to the edge and its endpoints;
+    fully rebuildable from Neo4j (scripts/reindex_vectors.py)."""
+
+    def __init__(self) -> None:
+        super().__init__("kgi-facts")
+
+    def upsert_fact(self, edge_id: str, text: str, subject_id: str,
+                    object_id: str, predicate: str,
+                    valid_from: str | None, valid_to: str | None) -> None:
+        self._upsert(edge_id, text, {
+            "edge_id": edge_id, "subject_id": subject_id, "object_id": object_id,
+            "predicate": predicate, "valid_from": valid_from, "valid_to": valid_to,
+            "text": text,
+        })
+
+    def nearest(self, query: str, limit: int = 8) -> list[dict]:
+        return self._nearest(query, limit)
+
+
 class PredicateVectors(_Collection):
     def __init__(self) -> None:
         super().__init__("kgi-predicates")

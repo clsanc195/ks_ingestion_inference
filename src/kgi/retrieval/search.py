@@ -18,6 +18,8 @@ from kgi.stores.neo4j import CanonicalGraph
 from kgi.stores.qdrant import EntityVectors
 
 ANCHOR_MIN_SCORE = 0.45  # below this the query simply isn't about the entity
+FACT_MIN_SCORE = 0.40    # fact-vector matches (the Facts door) seeding the walk
+MAX_SEEDS = 10
 _TEMPORAL_FILTER = (
     "($as_of IS NULL AND r.valid_to IS NULL) OR "
     "($as_of IS NOT NULL AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
@@ -52,6 +54,20 @@ def find_anchor_entities(query: str, k: int = 4) -> list[dict]:
     finally:
         vectors.close()
     return [h for h in hits if h["score"] >= ANCHOR_MIN_SCORE]
+
+
+def find_matching_facts(query: str, k: int = 8) -> list[dict]:
+    """The Facts door: match the question against committed facts directly —
+    catches fact-shaped queries ("what happened on <date>?", "any awards won?")
+    that have no entity to anchor on."""
+    from kgi.stores.qdrant import FactVectors
+
+    vectors = FactVectors()
+    try:
+        hits = vectors.nearest(query, limit=k)
+    finally:
+        vectors.close()
+    return [h for h in hits if h["score"] >= FACT_MIN_SCORE]
 
 
 def neighborhood_facts(
@@ -112,11 +128,21 @@ def neighborhood_facts(
 
 def retrieve(query: str, as_of: str | None = None, hops: int = 2) -> dict:
     anchors = find_anchor_entities(query)
+    fact_hits = find_matching_facts(query)
+
+    # Seeds = anchored entities + endpoints of directly-matched facts (the matched
+    # edges themselves are hop-1 from their endpoints, so the walk picks them up —
+    # and the temporal filter still applies to them uniformly).
+    seeds: list[str] = [a["canonical_id"] for a in anchors]
+    for h in sorted(fact_hits, key=lambda x: -x["score"]):
+        for sid in (h["subject_id"], h["object_id"]):
+            if sid not in seeds:
+                seeds.append(sid)
+    seeds = seeds[:MAX_SEEDS]
+
     graph = CanonicalGraph()
     try:
-        facts = neighborhood_facts(
-            graph, [a["canonical_id"] for a in anchors], hops=hops, as_of=as_of
-        )
+        facts = neighborhood_facts(graph, seeds, hops=hops, as_of=as_of)
     finally:
         graph.close()
-    return {"anchors": anchors, "facts": facts}
+    return {"anchors": anchors, "fact_hits": fact_hits, "facts": facts}
