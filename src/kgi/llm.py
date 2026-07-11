@@ -26,7 +26,10 @@ def structured_call(
     response_model,
     system: str,
     user: str,
-    max_tokens: int = 1024,
+    # Output cap, not a spend floor — only generated tokens bill. 1024 was too
+    # tight: a grounded answer over a large fact bundle (or a dense paragraph's
+    # extraction) truncated mid-JSON and Instructor raised IncompleteOutput.
+    max_tokens: int = 4096,
     model: str | None = None,
 ):
     model = model or settings().extraction_model

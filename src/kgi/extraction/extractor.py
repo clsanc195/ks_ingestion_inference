@@ -46,6 +46,9 @@ inferred beyond the text. Each item must include a verbatim supporting quote.
 
 For every entity, include a one-sentence description of what it IS, drawn only
 from this text (e.g. "Spanish national film awards presented annually").
+Descriptions must be self-contained: never refer to the source ("subject of this
+article", "described in this text") — describe the thing itself, as if to someone
+who has not read the document.
 
 Address-style chains assert containment: "in Chicago, Illinois, United States"
 asserts (Chicago) located in (Illinois) and (Illinois) located in (United States).

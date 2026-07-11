@@ -229,6 +229,7 @@ def resolve_node(state: IngestState) -> dict:
     signals: dict[str, dict] = {}
     refs: dict[str, NodeRef] = {}  # temp_id -> how edges should reference this entity
     dep_of: dict[str, str] = {}  # temp_id -> op_id that materializes it
+    update_for: dict[str, UpdateNodeProps] = {}  # canonical_id -> its ONE update op
     new_types = set(state.get("new_types", []))
 
     def _add(op, *, extraction: float, resolution: float, new_type: bool,
@@ -241,6 +242,38 @@ def resolve_node(state: IngestState) -> dict:
             "support": support,
             "semantic": semantic,
         }
+
+    def _propose_update(cid, gap_props, extra_pres, depends, rationale, *,
+                        extraction, resolution, new_type, support, raw_desc=""):
+        """One UpdateNodeProps per canonical node per patch. Two mentions of the
+        same node (e.g. 'United States' exact + 'US' merge) fold their props into
+        a single op — a second op would trip the first's own prop_equals guard at
+        commit and requeue forever."""
+        if cid in update_for:
+            op = update_for[cid]
+            for k, v in gap_props.items():
+                if k == "description" and "description" in op.properties:
+                    merged = _merged_description(op.properties["description"],
+                                                 raw_desc or v)
+                    if merged:
+                        op.properties["description"] = merged
+                else:
+                    op.properties.setdefault(k, v)
+            op.depends_on = sorted({*op.depends_on, *depends})
+            op.rationale += f"; also {rationale}"
+            return
+        op = UpdateNodeProps(
+            op_id=f"op_{uuid.uuid4().hex[:12]}",
+            canonical_id=cid,
+            properties=gap_props,
+            depends_on=depends,
+            preconditions=[Precondition(kind="node_exists", subject=cid),
+                           *extra_pres],
+            rationale=rationale,
+        )
+        update_for[cid] = op
+        _add(op, extraction=extraction, resolution=resolution,
+             new_type=new_type, support=support)
 
     # Normalize predicates BEFORE intra-batch dedup, so two units phrasing the same
     # fact differently ("produces" / "has flagship product") collapse into one op
@@ -258,19 +291,12 @@ def resolve_node(state: IngestState) -> dict:
                 match = graph.get_node(result.canonical_id) or {}
                 gap_props, extra_pres = _extend_props(ent.properties, match)
                 if gap_props:
-                    _add(
-                        UpdateNodeProps(
-                            op_id=f"op_{uuid.uuid4().hex[:12]}",
-                            canonical_id=result.canonical_id,
-                            properties=gap_props,
-                            preconditions=[
-                                Precondition(kind="node_exists", subject=result.canonical_id),
-                                *extra_pres,
-                            ],
-                            rationale=f"extends existing '{ent.name}' with {sorted(gap_props)}",
-                        ),
+                    _propose_update(
+                        result.canonical_id, gap_props, extra_pres, [],
+                        f"extends existing '{ent.name}' with {sorted(gap_props)}",
                         extraction=ent.extraction_confidence, resolution=1.0,
                         new_type=is_new_type, support=len(ent.evidence),
+                        raw_desc=ent.properties.get("description", ""),
                     )
             elif result.canonical_id:
                 # Non-trivial match (embedding/LLM): reviewable MergeInto for
@@ -303,23 +329,13 @@ def resolve_node(state: IngestState) -> dict:
                 # different entities") blocks the property write too.
                 gap_props, extra_pres = _extend_props(ent.properties, match)
                 if gap_props:
-                    _add(
-                        UpdateNodeProps(
-                            op_id=f"op_{uuid.uuid4().hex[:12]}",
-                            canonical_id=result.canonical_id,
-                            properties=gap_props,
-                            depends_on=[merge_op_id],
-                            preconditions=[
-                                Precondition(kind="node_exists", subject=result.canonical_id),
-                                *extra_pres,
-                            ],
-                            rationale=(
-                                f"merge of '{ent.name}' also extends "
-                                f"'{canonical_name}' with {sorted(gap_props)}"
-                            ),
-                        ),
+                    _propose_update(
+                        result.canonical_id, gap_props, extra_pres, [merge_op_id],
+                        f"merge of '{ent.name}' also extends "
+                        f"'{canonical_name}' with {sorted(gap_props)}",
                         extraction=ent.extraction_confidence, resolution=result.score,
                         new_type=is_new_type, support=len(ent.evidence),
+                        raw_desc=ent.properties.get("description", ""),
                     )
             else:
                 op_id = f"op_{uuid.uuid4().hex[:12]}"

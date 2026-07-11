@@ -155,6 +155,28 @@
     margin: 10px 0; padding: 10px 12px; border-left: 3px solid var(--s1);
     background: var(--page); border-radius: 0 8px 8px 0; font-size: 13.5px;
   }
+  .cite-card {
+    border: 1px solid var(--border); border-left: 3px solid var(--s1);
+    border-radius: 6px; padding: 8px 10px; font-size: 12.5px;
+    background: var(--surface-1);
+  }
+  .cite-card .fact-line { line-height: 1.5; }
+  .cite-card .fact-line .arrow { color: var(--s1); }
+  .cite-card .window {
+    font-size: 10.5px; color: var(--ink-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 1px 7px; margin-left: 6px; white-space: nowrap;
+  }
+  .cite-card .desc { color: var(--ink-muted); font-size: 11.5px; margin-top: 4px; }
+  .cite-card .desc b { color: var(--ink-2); font-weight: 600; }
+  .cite-card .quote {
+    font-style: italic; color: var(--ink-2); font-size: 11.5px; margin-top: 5px;
+    border-left: 2px solid var(--border); padding-left: 8px;
+  }
+  .cite-card .src { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .cite-card .src span {
+    font-size: 10.5px; padding: 1px 8px; border-radius: 999px;
+    background: var(--page); border: 1px solid var(--border); color: var(--ink-muted);
+  }
   .pending-op {
     border: 1px solid var(--border); border-left: 3px solid var(--s3);
     border-radius: 6px; padding: 8px 10px; font-size: 12.5px;
@@ -445,9 +467,29 @@ async function doAsk() {
     <div class="muted">${esc(q)}${asof ? ' · as of ' + esc(asof) : ''}</div>
     <div class="answer-box">${esc(d.answer)}</div>
     ${d.citations?.length ? `<h3>Grounded in</h3>
-    <ul class="plain">${d.citations.map(c =>
-      `<li class="fact-row">${esc(c.fact)}<div class="muted">${esc(c.sources.map(s => s.split('/').pop()).join(', ') || 'n/a')}</div></li>`).join('')}</ul>`
+    <ul class="plain">${d.citations.map(c => `<li>${citeCard(c)}</li>`).join('')}</ul>`
     : '<p class="empty">No supporting facts — the graph cannot answer this.</p>'}`;
+}
+
+function citeCard(c) {
+  if (!c.subject) {  // older payload shape
+    return `<div class="cite-card"><div class="fact-line">${esc(c.fact)}</div></div>`;
+  }
+  const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+  const win = (c.valid_from || c.valid_to)
+    ? `<span class="window">${esc(c.valid_from || '…')} → ${esc(c.valid_to || 'now')}</span>` : '';
+  const descs = [[c.subject, c.subject_description], [c.object, c.object_description]]
+    .filter(([, d]) => d)
+    .map(([n, d]) => `<div class="desc"><b>${esc(n)}</b> — ${esc(trunc(d, 160))}</div>`).join('');
+  const quotes = (c.quotes || []).slice(0, 2)
+    .map(q => `<div class="quote">"${esc(q)}"</div>`).join('');
+  const srcs = (c.sources || [])
+    .map(s => `<span>${esc((s || '').split('/').pop())}</span>`).join('');
+  return `<div class="cite-card">
+    <div class="fact-line"><b>${esc(c.subject)}</b> <span class="arrow">—${esc(c.predicate)}→</span> <b>${esc(c.object)}</b>${win}</div>
+    ${descs}${quotes}
+    <div class="src">${srcs || '<span>n/a</span>'}</div>
+  </div>`;
 }
 
 el('findBtn').addEventListener('click', doFind);

@@ -67,6 +67,9 @@ def answer(question: str, as_of: str | None = None) -> dict:
         graph = CanonicalGraph()
         try:
             described = graph.descriptions_for(seen[:_MAX_ENTITY_SUMMARIES])
+            # All endpoint descriptions, for enriching whatever gets cited below.
+            desc_by_id = {d["id"]: d["description"]
+                          for d in graph.descriptions_for(seen)}
         finally:
             graph.close()
         entity_lines = "\n".join(f"- {d['name']}: {d['description']}" for d in described)
@@ -82,8 +85,22 @@ def answer(question: str, as_of: str | None = None) -> dict:
         )
         by_id = {f.edge_id: f for f in facts}
         citations = [
-            {"edge_id": fid, "fact": by_id[fid].render(), "sources": by_id[fid].sources}
+            {
+                "edge_id": f.edge_id,
+                "fact": f.render(),
+                "subject": f.subject,
+                "predicate": f.predicate,
+                "object": f.object,
+                "valid_from": f.valid_from,
+                "valid_to": f.valid_to,
+                "support": f.support,
+                "quotes": f.quotes,
+                "subject_description": desc_by_id.get(f.subject_id, ""),
+                "object_description": desc_by_id.get(f.object_id, ""),
+                "sources": f.sources,
+            }
             for fid in grounded.fact_ids if fid in by_id
+            for f in [by_id[fid]]
         ]
         out = {
             "answer": grounded.answer,
