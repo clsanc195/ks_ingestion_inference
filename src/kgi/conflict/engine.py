@@ -135,6 +135,8 @@ def correlate_relation(
                     ReinforceEdge(
                         op_id=_op_id(),
                         canonical_edge_id=exact[0]["id"],
+                        quote=(relation.evidence[0].quote[:300]
+                               if relation.evidence else None),
                         preconditions=[
                             Precondition(kind="edge_exists", subject=exact[0]["id"])
                         ],

@@ -58,8 +58,10 @@ class CanonicalGraph(_Base):
             # automatically by Neo4j on every write — no reindex job needed
             s.run("CREATE FULLTEXT INDEX entity_text IF NOT EXISTS "
                   "FOR (n:Canonical) ON EACH [n.name, n.description]")
+            # r.quotes (string list) is indexed too — reinforcing sources'
+            # quotes are lexically searchable, not just the first one.
             s.run("CREATE FULLTEXT INDEX fact_text IF NOT EXISTS "
-                  "FOR ()-[r:REL]-() ON EACH [r.predicate, r.quote]")
+                  "FOR ()-[r:REL]-() ON EACH [r.predicate, r.quote, r.quotes]")
 
     def get_node(self, canonical_id: str) -> dict | None:
         with self.session() as s:
@@ -209,7 +211,8 @@ class CanonicalGraph(_Base):
                 "MATCH (a:AppliedOp {patch_id: $pid}) WHERE a.edge_id IS NOT NULL "
                 "MATCH (su:Canonical)-[r:REL {id: a.edge_id}]->(ob:Canonical) "
                 "RETURN DISTINCT r.id AS edge_id, r.predicate AS predicate, "
-                "coalesce(r.quote, '') AS quote, r.valid_from AS valid_from, "
+                "coalesce(r.quotes, CASE WHEN r.quote IS NULL OR r.quote = '' "
+                "  THEN [] ELSE [r.quote] END) AS quotes, r.valid_from AS valid_from, "
                 "r.valid_to AS valid_to, su.id AS subject_id, su.name AS subject, "
                 "ob.id AS object_id, ob.name AS object",
                 pid=patch_id,
@@ -221,7 +224,8 @@ class CanonicalGraph(_Base):
             return s.run(
                 "MATCH (su:Canonical)-[r:REL]->(ob:Canonical) "
                 "RETURN r.id AS edge_id, r.predicate AS predicate, "
-                "coalesce(r.quote, '') AS quote, r.valid_from AS valid_from, "
+                "coalesce(r.quotes, CASE WHEN r.quote IS NULL OR r.quote = '' "
+                "  THEN [] ELSE [r.quote] END) AS quotes, r.valid_from AS valid_from, "
                 "r.valid_to AS valid_to, su.id AS subject_id, su.name AS subject, "
                 "ob.id AS object_id, ob.name AS object"
             ).data()

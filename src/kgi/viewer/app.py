@@ -70,7 +70,8 @@ def create_app() -> FastAPI:
                 "RETURN r.predicate AS predicate, b.name AS other, "
                 "startNode(r).id = $id AS outgoing, r.valid_from AS valid_from, "
                 "r.valid_to AS valid_to, r.support AS support, "
-                "coalesce(r.quote, '') AS quote, "
+                "coalesce(r.quotes, CASE WHEN r.quote IS NULL OR r.quote = '' "
+                "  THEN [] ELSE [r.quote] END) AS quotes, "
                 "r.invalidation_reason AS reason "
                 "ORDER BY r.valid_to IS NOT NULL, predicate",
                 id=canonical_id,

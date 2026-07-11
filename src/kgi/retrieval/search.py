@@ -36,7 +36,9 @@ class Fact:
     valid_from: str | None
     valid_to: str | None
     support: int
-    quote: str = ""  # verbatim supporting text, stored on the edge at commit
+    # Verbatim supporting text, one entry per source that asserted the fact —
+    # the first at assert time, the rest accumulated by reinforce ops.
+    quotes: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)  # source document URIs
 
     def render(self) -> str:
@@ -93,7 +95,9 @@ def neighborhood_facts(
                 "startNode(r).name AS subject, r.predicate AS predicate, "
                 "endNode(r).name AS object, endNode(r).id AS obj_id, "
                 "r.valid_from AS valid_from, r.valid_to AS valid_to, "
-                "coalesce(r.support, 1) AS support, coalesce(r.quote, '') AS quote",
+                "coalesce(r.support, 1) AS support, "
+                "coalesce(r.quotes, CASE WHEN r.quote IS NULL OR r.quote = '' "
+                "  THEN [] ELSE [r.quote] END) AS quotes",
                 ids=frontier, as_of=as_of,
             ).data()
             next_frontier = []
@@ -105,7 +109,7 @@ def neighborhood_facts(
                         edge_id=row["edge_id"], subject=row["subject"],
                         predicate=row["predicate"], object=row["object"],
                         valid_from=row["valid_from"], valid_to=row["valid_to"],
-                        support=row["support"], quote=row["quote"],
+                        support=row["support"], quotes=row["quotes"],
                     )
                 for node_id in (row["subj_id"], row["obj_id"]):
                     if node_id not in seen_nodes:

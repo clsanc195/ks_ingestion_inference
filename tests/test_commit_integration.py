@@ -182,15 +182,23 @@ def test_invalidate_and_reinforce(graph):
     assert commit_patch(graph, patch).committed == ["i1"]
 
     _seed_edge(graph, edge_id="e_2", predicate="MANAGES")
-    patch2 = _patch([_routed(ReinforceEdge(op_id="r1", canonical_edge_id="e_2"))],
+    patch2 = _patch([_routed(ReinforceEdge(op_id="r1", canonical_edge_id="e_2",
+                                           quote="B is managed by A."))],
                     patch_id="p2")
     assert commit_patch(graph, patch2).committed == ["r1"]
+    # A second source's quote accumulates; an exact repeat does not.
+    patch3 = _patch([_routed(ReinforceEdge(op_id="r2", canonical_edge_id="e_2",
+                                           quote="B is managed by A."))],
+                    patch_id="p3")
+    assert commit_patch(graph, patch3).committed == ["r2"]
 
     with graph.session() as s:
         closed = s.run("MATCH ()-[r:REL {id:'e_1'}]->() RETURN r.valid_to AS vt").single()
-        support = s.run("MATCH ()-[r:REL {id:'e_2'}]->() RETURN r.support AS s").single()
+        rec = s.run("MATCH ()-[r:REL {id:'e_2'}]->() "
+                    "RETURN r.support AS s, r.quotes AS q").single()
     assert closed["vt"] == "2026-07-08"
-    assert support["s"] == 2
+    assert rec["s"] == 3
+    assert rec["q"] == ["B is managed by A."]
 
 
 def test_staging_roundtrip(graph):

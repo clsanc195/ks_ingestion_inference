@@ -32,7 +32,7 @@ for e in edges:
     preds.add(e["predicate"])
     fv.upsert_fact(e["edge_id"],
                    fact_text(e["subject"], e["predicate"], e["object"],
-                             e["valid_from"], e["valid_to"], e["quote"]),
+                             e["valid_from"], e["valid_to"], e["quotes"]),
                    e["subject_id"], e["object_id"], e["predicate"],
                    e["valid_from"], e["valid_to"])
 for p in preds:

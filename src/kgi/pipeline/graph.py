@@ -158,6 +158,45 @@ def _dedupe_batch(
     return list(survivors.values()), list(merged.values())
 
 
+_DESC_CAP = 600
+
+
+def _merged_description(old: str, new: str) -> str | None:
+    """None when the new description adds nothing (empty, or already covered by
+    the old text); otherwise both joined, existing first. The merge goes through
+    the gate as an UpdateNodeProps — the reviewer sees the proposed combined
+    value and can edit it before it lands."""
+    o, n = (old or "").strip(), (new or "").strip()
+    if not n or n.lower() in o.lower():
+        return None
+    if o.lower() in n.lower():
+        return n[:_DESC_CAP]
+    return f"{o.rstrip('.')}. {n}"[:_DESC_CAP]
+
+
+def _extend_props(ent_props: dict, match: dict) -> tuple[dict, list[Precondition]]:
+    """What an existing canonical node gains from this mention: gap-fill for
+    absent keys, plus a description MERGE (never overwrite) when both sides
+    have one — later documents' characterizations accumulate instead of being
+    dropped. The merge carries a prop_equals precondition on the old value so
+    a concurrent description change requeues instead of clobbering."""
+    props = {k: v for k, v in ent_props.items()
+             if match.get(k) in (None, "")}
+    pres: list[Precondition] = []
+    old_desc = match.get("description") or ""
+    if old_desc and "description" in ent_props:
+        merged = _merged_description(old_desc, ent_props["description"])
+        if merged is None:
+            props.pop("description", None)
+        else:
+            props["description"] = merged
+            pres.append(Precondition(
+                kind="prop_equals", subject=match["id"],
+                expected={"prop": "description", "value": old_desc},
+            ))
+    return props, pres
+
+
 def resolve_node(state: IngestState) -> dict:
     """Resolution cascade + minimal correlation -> proposed Patch (§3.1 step 6).
 
@@ -208,7 +247,7 @@ def resolve_node(state: IngestState) -> dict:
             if result.canonical_id and result.method == "rules":
                 refs[ent.temp_id] = NodeRef(canonical_id=result.canonical_id)
                 match = graph.get_node(result.canonical_id) or {}
-                gap_props = {k: v for k, v in ent.properties.items() if k not in match}
+                gap_props, extra_pres = _extend_props(ent.properties, match)
                 if gap_props:
                     _add(
                         UpdateNodeProps(
@@ -216,7 +255,8 @@ def resolve_node(state: IngestState) -> dict:
                             canonical_id=result.canonical_id,
                             properties=gap_props,
                             preconditions=[
-                                Precondition(kind="node_exists", subject=result.canonical_id)
+                                Precondition(kind="node_exists", subject=result.canonical_id),
+                                *extra_pres,
                             ],
                             rationale=f"extends existing '{ent.name}' with {sorted(gap_props)}",
                         ),
@@ -227,10 +267,12 @@ def resolve_node(state: IngestState) -> dict:
                 # Non-trivial match (embedding/LLM): reviewable MergeInto for
                 # SAME_AS provenance; edges land on the canonical node.
                 refs[ent.temp_id] = NodeRef(canonical_id=result.canonical_id)
-                canonical_name = (graph.get_node(result.canonical_id) or {}).get("name", "?")
+                match = graph.get_node(result.canonical_id) or {}
+                canonical_name = match.get("name", "?")
+                merge_op_id = f"op_{uuid.uuid4().hex[:12]}"
                 _add(
                     MergeInto(
-                        op_id=f"op_{uuid.uuid4().hex[:12]}",
+                        op_id=merge_op_id,
                         temp_id=ent.temp_id,
                         canonical_id=result.canonical_id,
                         match_score=result.score,
@@ -246,6 +288,30 @@ def resolve_node(state: IngestState) -> dict:
                     extraction=ent.extraction_confidence, resolution=result.score,
                     new_type=is_new_type, support=len(ent.evidence),
                 )
+                # The staged mention's properties used to be dropped on merge.
+                # Now they gap-fill / description-merge onto the canonical node —
+                # depends_on the merge, so rejecting the merge ("these are
+                # different entities") blocks the property write too.
+                gap_props, extra_pres = _extend_props(ent.properties, match)
+                if gap_props:
+                    _add(
+                        UpdateNodeProps(
+                            op_id=f"op_{uuid.uuid4().hex[:12]}",
+                            canonical_id=result.canonical_id,
+                            properties=gap_props,
+                            depends_on=[merge_op_id],
+                            preconditions=[
+                                Precondition(kind="node_exists", subject=result.canonical_id),
+                                *extra_pres,
+                            ],
+                            rationale=(
+                                f"merge of '{ent.name}' also extends "
+                                f"'{canonical_name}' with {sorted(gap_props)}"
+                            ),
+                        ),
+                        extraction=ent.extraction_confidence, resolution=result.score,
+                        new_type=is_new_type, support=len(ent.evidence),
+                    )
             else:
                 op_id = f"op_{uuid.uuid4().hex[:12]}"
                 refs[ent.temp_id] = NodeRef(temp_id=ent.temp_id)
@@ -475,7 +541,7 @@ def commit_node(state: IngestState) -> dict:
                     fact_vectors.upsert_fact(
                         e["edge_id"],
                         fact_text(e["subject"], e["predicate"], e["object"],
-                                  e["valid_from"], e["valid_to"], e["quote"]),
+                                  e["valid_from"], e["valid_to"], e["quotes"]),
                         e["subject_id"], e["object_id"], e["predicate"],
                         e["valid_from"], e["valid_to"],
                     )

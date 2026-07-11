@@ -108,10 +108,15 @@ class InvalidateEdge(_OpBase):
 
 
 class ReinforceEdge(_OpBase):
-    """New source asserts an existing fact (correlation: 'reinforces')."""
+    """New source asserts an existing fact (correlation: 'reinforces').
+
+    Carries the new source's verbatim quote so evidence accumulates on the edge
+    (r.quotes) instead of only bumping the support counter — multi-source facts
+    keep every source's wording, not just the first."""
 
     op: Literal["reinforce_edge"] = "reinforce_edge"
     canonical_edge_id: str
+    quote: str | None = None
 
 
 PatchOp = Annotated[

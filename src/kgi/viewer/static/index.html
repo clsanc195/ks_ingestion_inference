@@ -627,7 +627,7 @@ async function select(id) {
         <span class="pred">${e.outgoing ? '' : '← '}${esc(e.predicate)}${e.outgoing ? ' →' : ''}</span>
         <b>${esc(e.other)}</b>
         <div class="muted">${e.valid_from ? 'from ' + esc(e.valid_from) + ' · ' : ''}${e.valid_to ? 'until ' + esc(e.valid_to) + ' · ' + esc(e.reason) + ' · ' : ''}support ${e.support ?? 1}</div>
-        ${e.quote ? `<div class="muted" style="font-style:italic">"${esc(e.quote)}"</div>` : ''}
+        ${(e.quotes || []).map(q => `<div class="muted" style="font-style:italic">"${esc(q)}"</div>`).join('')}
       </li>`).join('') || '<li class="empty">none</li>'}
     </ul>
     <h3>Provenance</h3>

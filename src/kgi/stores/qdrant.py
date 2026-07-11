@@ -84,13 +84,16 @@ class EntityVectors(_Collection):
 
 def fact_text(subject: str, predicate: str, obj: str,
               valid_from: str | None = None, valid_to: str | None = None,
-              quote: str = "") -> str:
-    """The text a fact embeds as — rendering + window + verbatim quote."""
+              quotes: list[str] | None = None) -> str:
+    """The text a fact embeds as — rendering + window + verbatim quotes.
+    Up to three quotes: enough wording diversity to catch paraphrased queries
+    without diluting the embedding (bge-small truncates long inputs anyway)."""
     t = f"({subject}) —{predicate}→ ({obj})"
     if valid_from or valid_to:
         t += f" · {valid_from or '…'}→{valid_to or 'now'}"
-    if quote:
-        t += f' — "{quote}"'
+    for q in (quotes or [])[:3]:
+        if q:
+            t += f' — "{q}"'
     return t
 
 

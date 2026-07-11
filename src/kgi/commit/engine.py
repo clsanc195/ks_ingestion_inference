@@ -151,10 +151,16 @@ class _OpApplier:
             )
             _write_ledger(tx, self.patch, op.op_id, wrote_edge=op.canonical_edge_id)
         elif isinstance(op, ReinforceEdge):
+            # Evidence accumulates: the new source's quote joins r.quotes (list
+            # seeded from the legacy single r.quote), skipping exact repeats.
             tx.run(
                 "MATCH ()-[r:REL {id: $id}]->() "
-                "SET r.support = coalesce(r.support, 1) + 1",
-                id=op.canonical_edge_id,
+                "WITH r, coalesce(r.quotes, CASE WHEN r.quote IS NULL OR r.quote = '' "
+                "     THEN [] ELSE [r.quote] END) AS qs "
+                "SET r.support = coalesce(r.support, 1) + 1, "
+                "    r.quotes = CASE WHEN $q IS NULL OR $q = '' OR $q IN qs "
+                "               THEN qs ELSE qs + $q END",
+                id=op.canonical_edge_id, q=op.quote,
             )
             _write_ledger(tx, self.patch, op.op_id, wrote_edge=op.canonical_edge_id)
         elif isinstance(op, SplitNode):
