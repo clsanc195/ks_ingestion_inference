@@ -126,23 +126,43 @@ def neighborhood_facts(
     return list(facts.values())
 
 
+def _rrf_seeds(ranked_lists: list[list[str]], k: int = 60) -> list[str]:
+    """Reciprocal Rank Fusion: scores are incomparable across doors (cosine vs
+    BM25), ranks aren't. Each node id earns 1/(k+rank) per list it appears in."""
+    scores: dict[str, float] = {}
+    for lst in ranked_lists:
+        seen: set[str] = set()
+        rank = 0
+        for nid in lst:
+            if nid in seen:
+                continue
+            seen.add(nid)
+            rank += 1
+            scores[nid] = scores.get(nid, 0.0) + 1.0 / (k + rank)
+    return [nid for nid, _ in sorted(scores.items(), key=lambda x: -x[1])]
+
+
 def retrieve(query: str, as_of: str | None = None, hops: int = 2) -> dict:
+    """Three doors, one walk: entity vectors (meaning), fact vectors (what
+    happened), Lucene full-text (exact terms) — fused by RRF into walk seeds."""
     anchors = find_anchor_entities(query)
     fact_hits = find_matching_facts(query)
 
-    # Seeds = anchored entities + endpoints of directly-matched facts (the matched
-    # edges themselves are hop-1 from their endpoints, so the walk picks them up —
-    # and the temporal filter still applies to them uniformly).
-    seeds: list[str] = [a["canonical_id"] for a in anchors]
-    for h in sorted(fact_hits, key=lambda x: -x["score"]):
-        for sid in (h["subject_id"], h["object_id"]):
-            if sid not in seeds:
-                seeds.append(sid)
-    seeds = seeds[:MAX_SEEDS]
-
     graph = CanonicalGraph()
     try:
+        lex_entities = graph.fulltext_entities(query)
+        lex_facts = graph.fulltext_facts(query)
+
+        seeds = _rrf_seeds([
+            [a["canonical_id"] for a in anchors],
+            [sid for h in fact_hits for sid in (h["subject_id"], h["object_id"])],
+            [e["canonical_id"] for e in lex_entities],
+            [sid for h in lex_facts for sid in (h["subject_id"], h["object_id"])],
+        ])[:MAX_SEEDS]
+
         facts = neighborhood_facts(graph, seeds, hops=hops, as_of=as_of)
     finally:
         graph.close()
-    return {"anchors": anchors, "fact_hits": fact_hits, "facts": facts}
+    return {"anchors": anchors, "fact_hits": fact_hits,
+            "lexical": {"entities": lex_entities, "facts": lex_facts},
+            "facts": facts}

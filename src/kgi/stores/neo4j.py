@@ -21,6 +21,14 @@ from kgi.config import settings
 from kgi.models import Patch, ReviewDecision
 
 
+_LUCENE_SPECIALS = set('+-&|!(){}[]^"~*?:\\/')
+
+
+def _lucene_sanitize(query: str) -> str:
+    """Strip Lucene operator characters so raw questions can't break the parser."""
+    return "".join(c if c not in _LUCENE_SPECIALS else " " for c in query).strip()
+
+
 class _Base:
     def __init__(self) -> None:
         cfg = settings()
@@ -46,6 +54,12 @@ class CanonicalGraph(_Base):
                   "FOR (n:AppliedOp) REQUIRE n.op_id IS UNIQUE")
             s.run("CREATE CONSTRAINT patch_id IF NOT EXISTS "
                   "FOR (n:Patch) REQUIRE n.id IS UNIQUE")
+            # the lexical door: Lucene full-text (BM25 scoring), maintained
+            # automatically by Neo4j on every write — no reindex job needed
+            s.run("CREATE FULLTEXT INDEX entity_text IF NOT EXISTS "
+                  "FOR (n:Canonical) ON EACH [n.name, n.description]")
+            s.run("CREATE FULLTEXT INDEX fact_text IF NOT EXISTS "
+                  "FOR ()-[r:REL]-() ON EACH [r.predicate, r.quote]")
 
     def get_node(self, canonical_id: str) -> dict | None:
         with self.session() as s:
@@ -69,6 +83,35 @@ class CanonicalGraph(_Base):
                 "SET d.doc_id = $doc_id, d.source_uri = $uri",
                 h=content_hash, doc_id=doc_id, uri=source_uri,
             )
+
+    def fulltext_entities(self, query: str, limit: int = 8) -> list[dict]:
+        """BM25/lexical entity search over names + descriptions — exact rare terms
+        (acronyms, codes, dates-as-text) that embeddings smear."""
+        q = _lucene_sanitize(query)
+        if not q:
+            return []
+        with self.session() as s:
+            return s.run(
+                "CALL db.index.fulltext.queryNodes('entity_text', $q) "
+                "YIELD node, score RETURN node.id AS canonical_id, "
+                "node.name AS name, score LIMIT $limit",
+                q=q, limit=limit,
+            ).data()
+
+    def fulltext_facts(self, query: str, limit: int = 8) -> list[dict]:
+        """BM25/lexical search over fact quotes + predicates."""
+        q = _lucene_sanitize(query)
+        if not q:
+            return []
+        with self.session() as s:
+            return s.run(
+                "CALL db.index.fulltext.queryRelationships('fact_text', $q) "
+                "YIELD relationship, score "
+                "RETURN relationship.id AS edge_id, "
+                "startNode(relationship).id AS subject_id, "
+                "endNode(relationship).id AS object_id, score LIMIT $limit",
+                q=q, limit=limit,
+            ).data()
 
     def find_by_name(self, name: str, entity_type: str | None = None) -> dict | None:
         """Case-insensitive exact-name lookup — the rules tier of resolution (L5).
