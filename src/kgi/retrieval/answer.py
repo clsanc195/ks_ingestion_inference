@@ -16,13 +16,18 @@ class GroundedAnswer(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
-_SYSTEM = """You answer questions using ONLY the numbered facts provided from a
-curated knowledge graph. Rules:
-- Never use outside knowledge; if the facts don't contain the answer, say so.
+_SYSTEM = """You answer questions using ONLY the material provided from a
+curated knowledge graph: entity summaries (what things are) and numbered facts
+(how they relate). Rules:
+- Never use outside knowledge; if the material doesn't contain the answer, say so.
+- Entity summaries are reviewed knowledge — use them freely, especially for
+  definitional questions ("what is X?").
 - Facts carry validity windows [from → to]. Respect them: a fact closed before
   the question's reference time no longer holds; when the question asks about the
   past, prefer facts whose window covers that time.
-- Cite every fact you rely on by its id."""
+- Cite every fact you rely on by its id (entity summaries need no citation)."""
+
+_MAX_ENTITY_SUMMARIES = 12
 
 
 def answer(question: str, as_of: str | None = None) -> dict:
@@ -48,13 +53,32 @@ def answer(question: str, as_of: str | None = None) -> dict:
             + "".join(f'\n    source text: "{q}"' for q in f.quotes if q)
             for f in facts
         )
+
+        # Entity summaries for the nodes the facts touch, in fact order — the
+        # descriptions say what things ARE; without them, definitional questions
+        # ("what is X?") could only be answered from relationship structure.
+        from kgi.stores.neo4j import CanonicalGraph
+
+        seen: list[str] = []
+        for f in facts:
+            for nid in (f.subject_id, f.object_id):
+                if nid and nid not in seen:
+                    seen.append(nid)
+        graph = CanonicalGraph()
+        try:
+            described = graph.descriptions_for(seen[:_MAX_ENTITY_SUMMARIES])
+        finally:
+            graph.close()
+        entity_lines = "\n".join(f"- {d['name']}: {d['description']}" for d in described)
+        entity_block = f"Entity summaries:\n{entity_lines}\n\n" if entity_lines else ""
+
         time_note = f"\nAnswer as of {as_of} — that is the reference time." if as_of else ""
 
         grounded = structured_call(
             "grounded-answer",
             GroundedAnswer,
             system=_SYSTEM,
-            user=f"Facts:\n{fact_lines}\n\nQuestion: {question}{time_note}",
+            user=f"{entity_block}Facts:\n{fact_lines}\n\nQuestion: {question}{time_note}",
         )
         by_id = {f.edge_id: f for f in facts}
         citations = [

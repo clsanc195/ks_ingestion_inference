@@ -36,6 +36,8 @@ class Fact:
     valid_from: str | None
     valid_to: str | None
     support: int
+    subject_id: str = ""
+    object_id: str = ""
     # Verbatim supporting text, one entry per source that asserted the fact —
     # the first at assert time, the rest accumulated by reinforce ops.
     quotes: list[str] = field(default_factory=list)
@@ -108,6 +110,7 @@ def neighborhood_facts(
                     facts[row["edge_id"]] = Fact(
                         edge_id=row["edge_id"], subject=row["subject"],
                         predicate=row["predicate"], object=row["object"],
+                        subject_id=row["subj_id"], object_id=row["obj_id"],
                         valid_from=row["valid_from"], valid_to=row["valid_to"],
                         support=row["support"], quotes=row["quotes"],
                     )

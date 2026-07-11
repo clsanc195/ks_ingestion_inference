@@ -115,6 +115,18 @@ class CanonicalGraph(_Base):
                 q=q, limit=limit,
             ).data()
 
+    def descriptions_for(self, canonical_ids: list[str]) -> list[dict]:
+        """Names + descriptions for a set of nodes — entity context handed to the
+        answer composer alongside the facts (a fact list defines relationships;
+        the descriptions define the things themselves)."""
+        with self.session() as s:
+            return s.run(
+                "MATCH (n:Canonical) WHERE n.id IN $ids "
+                "AND n.description IS NOT NULL AND n.description <> '' "
+                "RETURN n.id AS id, n.name AS name, n.description AS description",
+                ids=canonical_ids,
+            ).data()
+
     def find_by_name(self, name: str, entity_type: str | None = None) -> dict | None:
         """Case-insensitive exact-name lookup — the rules tier of resolution (L5).
         Only trivially-identical mentions match here; everything fuzzier belongs to
