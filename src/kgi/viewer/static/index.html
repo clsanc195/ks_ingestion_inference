@@ -349,9 +349,11 @@ function toWorld(ev) {
 }
 svg.addEventListener('wheel', ev => {
   ev.preventDefault();
-  const k = ev.deltaY < 0 ? 1.12 : 0.89;
+  const k = Math.exp(-ev.deltaY * 0.0018);
   const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
-  tx = mx - (mx - tx) * k; ty = my - (my - ty) * k; scale *= k;
+  const ns = Math.min(Math.max(scale * k, 0.15), 8);
+  const kk = ns / scale;
+  tx = mx - (mx - tx) * kk; ty = my - (my - ty) * kk; scale = ns;
   applyView();
 }, {passive: false});
 svg.addEventListener('pointerdown', ev => {
