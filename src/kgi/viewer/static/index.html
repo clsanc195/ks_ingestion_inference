@@ -596,15 +596,27 @@ el('submitAll').addEventListener('click', async () => {
     || prompt('reviewer name for provenance', 'web') || 'web';
   localStorage.setItem('kgi-reviewer', reviewer);
   el('submitAll').disabled = true; el('submitAll').textContent = 'committing…';
-  for (const [patchId, decs] of Object.entries(byPatch)) {
-    const report = await fetch(`/api/review/${patchId}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reviewer, decisions: decs }),
-    }).then(r => r.json());
-    console.log(patchId, report);
+  try {
+    for (const [patchId, decs] of Object.entries(byPatch)) {
+      const resp = await fetch(`/api/review/${patchId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewer, decisions: decs }),
+      });
+      const report = await resp.json().catch(() => ({}));
+      console.log(patchId, resp.status, report);
+      if (!resp.ok) {
+        // Keep this patch's selections so the user can retry.
+        alert(`submit failed for ${patchId}: ${report.detail || 'HTTP ' + resp.status}`
+              + '\n(decisions kept — check the server log and retry)');
+        continue;
+      }
+      Object.keys(decs).forEach(k => delete decisions[k]);
+    }
+  } catch (err) {
+    alert('submit failed: ' + err + '\n(decisions kept — is the server up?)');
+  } finally {
+    el('submitAll').disabled = false; el('submitAll').textContent = 'Submit decisions';
   }
-  Object.keys(decisions).forEach(k => delete decisions[k]);
-  el('submitAll').disabled = false; el('submitAll').textContent = 'Submit decisions';
   await load();
   showQueue();
 });

@@ -12,6 +12,7 @@ Generations record model, prompt, parsed output, and token usage.
 
 import atexit
 import os
+import sys
 from contextlib import contextmanager
 from functools import lru_cache
 
@@ -50,28 +51,41 @@ def langgraph_callbacks() -> list:
 
 
 @contextmanager
-def generation(name: str, model: str, input: dict):
-    """LLM-call observation; yields the observation (or None when disabled)."""
-    if not enabled():
+def _traced(open_cm):
+    """Fail-open wrapper: tracing errors (enter/exit) are swallowed, but
+    exceptions raised by the BODY of the with-block always propagate.
+    (Wrapping the yield itself in try/except re-yields after a throw() —
+    'generator didn't stop' — and masks the caller's real error.)"""
+    try:
+        cm = open_cm()
+        obs = cm.__enter__()
+    except Exception:
         yield None
         return
     try:
-        with _client().start_as_current_generation(
-            name=name, model=model, input=input
-        ) as gen:
-            yield gen
-    except Exception:
-        yield None
+        yield obs
+    finally:
+        try:
+            cm.__exit__(*sys.exc_info())
+        except Exception:
+            pass
 
 
 @contextmanager
+def _noop():
+    yield None
+
+
+def generation(name: str, model: str, input: dict):
+    """LLM-call observation; yields the observation (or None when disabled)."""
+    if not enabled():
+        return _noop()
+    return _traced(lambda: _client().start_as_current_generation(
+        name=name, model=model, input=input))
+
+
 def span(name: str, input: dict | None = None):
     """Grouping span (e.g. one `kgi ask` request); yields observation or None."""
     if not enabled():
-        yield None
-        return
-    try:
-        with _client().start_as_current_span(name=name, input=input) as sp:
-            yield sp
-    except Exception:
-        yield None
+        return _noop()
+    return _traced(lambda: _client().start_as_current_span(name=name, input=input))
