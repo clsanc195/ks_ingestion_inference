@@ -47,6 +47,12 @@ inferred beyond the text. Each item must include a verbatim supporting quote.
 For every entity, include a one-sentence description of what it IS, drawn only
 from this text (e.g. "Spanish national film awards presented annually").
 
+Address-style chains assert containment: "in Chicago, Illinois, United States"
+asserts (Chicago) located in (Illinois) and (Illinois) located in (United States).
+Avoid dangling entities: if you extract an entity, also extract the relations this
+text gives it. An entity with no relations should be rare — only when the text
+truly says nothing relational about it.
+
 Entities must be specific, nameable things: proper names, titles, organizations,
 places, products, dated events. NEVER output as an entity:
 - pronouns (he, she, it, they, this, ...)
