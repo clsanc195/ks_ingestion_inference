@@ -435,12 +435,27 @@ function clearHighlight() {
 }
 
 // --- search & ask ---
+async function apiGet(url, what) {
+  let resp;
+  try { resp = await fetch(url); }
+  catch (err) { throw new Error(`${what} failed: ${err.message} — is the server up?`); }
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(body.detail || `${what} failed (HTTP ${resp.status}) — check the server log`);
+  return body;
+}
+
 async function doFind() {
   const q = el('q').value.trim();
   if (!q) return;
   const asof = el('asof').value;
   const url = `/api/search?q=${encodeURIComponent(q)}` + (asof ? `&as_of=${asof}` : '');
-  const d = await fetch(url).then(r => r.json());
+  let d;
+  try { d = await apiGet(url, 'search'); }
+  catch (err) {
+    el('panel').innerHTML = `<h2>Search</h2><div class="muted">${esc(q)}</div>
+      <div class="answer-box" style="border-left-color:var(--critical)">${esc(err.message)}</div>`;
+    return;
+  }
   highlightEdgeIds(d.facts.map(f => f.edge_id), d.anchors.map(a => a.canonical_id));
   el('panel').innerHTML = `<h2>Search</h2>
     <div class="muted">${esc(q)}${asof ? ' · as of ' + esc(asof) : ''}</div>
@@ -461,7 +476,13 @@ async function doAsk() {
   el('panel').innerHTML = `<h2>Ask</h2><div class="muted">${esc(q)}</div>
     <p class="empty">thinking…</p>`;
   const url = `/api/ask?q=${encodeURIComponent(q)}` + (asof ? `&as_of=${asof}` : '');
-  const d = await fetch(url).then(r => r.json());
+  let d;
+  try { d = await apiGet(url, 'ask'); }
+  catch (err) {
+    el('panel').innerHTML = `<h2>Ask</h2><div class="muted">${esc(q)}</div>
+      <div class="answer-box" style="border-left-color:var(--critical)">${esc(err.message)}</div>`;
+    return;
+  }
   highlightEdgeIds((d.citations || []).map(c => c.edge_id));
   el('panel').innerHTML = `<h2>Ask</h2>
     <div class="muted">${esc(q)}${asof ? ' · as of ' + esc(asof) : ''}</div>

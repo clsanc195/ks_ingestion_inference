@@ -5,15 +5,26 @@ citations map back to fact renderings + source documents, so every claim in the
 answer is traceable to a reviewed commit (the retrieval-side face of F9).
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from kgi.retrieval.search import Fact, retrieve
 
 
 class GroundedAnswer(BaseModel):
+    # fact_ids FIRST: on long answers the model degrades late in the generation
+    # and garbles trailing fields — the ids must be emitted before the prose.
+    # Capped at ~12: enumerating 50+ ids is what triggered the degradation.
+    fact_ids: list[str] = Field(
+        default_factory=list,
+        description="FIRST, the edge_ids of the facts MOST load-bearing for the "
+                    "answer — at most 12, never every retrieved fact")
     answer: str = Field(description="Concise answer, or a statement that the graph does not contain the answer")
-    fact_ids: list[str] = Field(description="edge_ids of the facts the answer relies on")
     confidence: float = Field(ge=0.0, le=1.0)
+
+    @field_validator("fact_ids")
+    @classmethod
+    def _clamp(cls, v: list[str]) -> list[str]:
+        return v[:20]
 
 
 _SYSTEM = """You answer questions using ONLY the material provided from a
@@ -25,9 +36,30 @@ curated knowledge graph: entity summaries (what things are) and numbered facts
 - Facts carry validity windows [from → to]. Respect them: a fact closed before
   the question's reference time no longer holds; when the question asks about the
   past, prefer facts whose window covers that time.
-- Cite every fact you rely on by its id (entity summaries need no citation)."""
+- Cite the facts you rely on by id — the MOST load-bearing ones, at most 12.
+  Do not enumerate every retrieved fact (entity summaries need no citation)."""
 
 _MAX_ENTITY_SUMMARIES = 12
+
+
+def _salvage_degraded_output(grounded: GroundedAnswer) -> None:
+    """On very long generations the model can drift into XML-parameter syntax
+    INSIDE the answer string ('</answer><parameter name="fact_ids">[...]').
+    Recover the leaked ids and strip the markup rather than failing the ask."""
+    import json
+    import re
+
+    raw = grounded.answer
+    if "</answer>" not in raw and "<parameter" not in raw:
+        return
+    if not grounded.fact_ids:
+        m = re.search(r'\[\s*"edge_[^\]]*\]', raw)
+        if m:
+            try:
+                grounded.fact_ids = json.loads(m.group(0))[:20]
+            except Exception:
+                pass
+    grounded.answer = re.split(r"</answer>|<parameter", raw)[0].strip()
 
 
 def answer(question: str, as_of: str | None = None) -> dict:
@@ -83,6 +115,7 @@ def answer(question: str, as_of: str | None = None) -> dict:
             system=_SYSTEM,
             user=f"{entity_block}Facts:\n{fact_lines}\n\nQuestion: {question}{time_note}",
         )
+        _salvage_degraded_output(grounded)
         by_id = {f.edge_id: f for f in facts}
         citations = [
             {
