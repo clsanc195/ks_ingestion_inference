@@ -21,6 +21,18 @@ def _client():
     return instructor.from_anthropic(anthropic.Anthropic())
 
 
+# USD per token, by Anthropic billing class (Sonnet tier). Used to send exact
+# costs to Langfuse — its model catalog can price input/output but not the
+# cache classes, and cache reads are 10x cheaper than fresh input.
+# Verify against anthropic.com/pricing when changing KGI_EXTRACTION_MODEL.
+_PRICE_PER_TOKEN = {
+    "input": 3.00 / 1_000_000,
+    "output": 15.00 / 1_000_000,
+    "cache_read_input_tokens": 0.30 / 1_000_000,
+    "cache_creation_input_tokens": 3.75 / 1_000_000,
+}
+
+
 def structured_call(
     name: str,
     response_model,
@@ -47,13 +59,24 @@ def structured_call(
         )
         if gen is not None:
             try:
-                gen.update(
-                    output=result.model_dump(),
-                    usage_details={
-                        "input": completion.usage.input_tokens,
-                        "output": completion.usage.output_tokens,
-                    },
-                )
+                usage = completion.usage
+                # Anthropic bills four token classes at different rates; input_tokens
+                # already EXCLUDES cached tokens, so report each class separately and
+                # let Langfuse price them per usage type (Settings -> Models).
+                usage_details = {
+                    "input": usage.input_tokens,
+                    "output": usage.output_tokens,
+                }
+                for key in ("cache_read_input_tokens", "cache_creation_input_tokens"):
+                    tokens = getattr(usage, key, 0) or 0
+                    if tokens:
+                        usage_details[key] = tokens
+                cost_details = {k: v * _PRICE_PER_TOKEN[k]
+                                for k, v in usage_details.items()}
+                cost_details["total"] = sum(cost_details.values())
+                gen.update(output=result.model_dump(),
+                           usage_details=usage_details,
+                           cost_details=cost_details)
             except Exception:
                 pass
     return result
