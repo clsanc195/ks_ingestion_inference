@@ -9,3 +9,12 @@ dist/
 .ruff_cache/
 data/
 .DS_Store
+eval_reports/
+
+# Office lock files (open documents)
+~$*
+
+# demo recordings: only the web-sized compressed cut is versioned
+Video Demo/**
+!Video Demo/Knowledge Store/
+!Video Demo/Knowledge Store/Knowledge Store (web).mp4

@@ -189,6 +189,38 @@ def review(
 
 
 @app.command()
+def eval(
+    bench_dir: str = typer.Option("examples/benchmarks/webnlg",
+                                  help="Directory of *.md docs with *.gold.json sidecars"),
+    pred_threshold: float = typer.Option(0.60,
+                                         help="Predicate embedding-similarity bar for a full-triple match"),
+):
+    """Extraction eval vs gold triples — DB-free; gates prompt/model changes.
+
+    pair = right subject & object · triple = pair + similar predicate."""
+    from kgi.evaluation import run_extraction_eval
+
+    report = run_extraction_eval(bench_dir, pred_threshold)
+    agg = report["aggregate"]
+    console.print(f"\n[bold]extraction eval[/bold] · model {report['model']} · "
+                  f"prompt {report['prompt_sha']} · pred-sim ≥ {report['pred_threshold']}")
+    header = f"{'doc':<16}{'gold':>6}{'extr':>6}{'pair P/R/F1':>18}{'triple P/R/F1':>18}{'rev':>5}"
+    console.print(f"[dim]{header}[/dim]")
+    for name, d in report["docs"].items():
+        console.print(
+            f"{name:<16}{d['gold']:>6}{d['extracted']:>6}"
+            f"{d['pair']['precision']:>7.2f}{d['pair']['recall']:>5.2f}{d['pair']['f1']:>6.2f}"
+            f"{d['triple']['precision']:>7.2f}{d['triple']['recall']:>5.2f}{d['triple']['f1']:>6.2f}"
+            f"{d['reversed_matches']:>5}")
+    console.print(
+        f"[bold]{'TOTAL':<16}{agg['gold']:>6}{agg['extracted']:>6}"
+        f"{agg['pair']['precision']:>7.2f}{agg['pair']['recall']:>5.2f}{agg['pair']['f1']:>6.2f}"
+        f"{agg['triple']['precision']:>7.2f}{agg['triple']['recall']:>5.2f}{agg['triple']['f1']:>6.2f}"
+        f"{agg['reversed_matches']:>5}[/bold]")
+    console.print(f"[dim]full report (misses + false positives): {report['report_path']}[/dim]")
+
+
+@app.command()
 def search(query: str, as_of: str = typer.Option(None, help="ISO date: facts valid at that time")):
     """Retrieve graph facts relevant to a query (anchors + neighborhood)."""
     from kgi.retrieval import retrieve
